@@ -2,23 +2,23 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'cargo_screen.dart';
-import 'generateCargo_Ticket.dart';
+import '../services/pdf/generateCargo_Ticket.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
-import 'package:untitled3/reporte_caja_screen.dart' hide SharedPreferences; // Hide to avoid ambiguity
-import 'generateTicket.dart';
+import 'reporte_caja_screen.dart' hide SharedPreferences; // Hide to avoid ambiguity
+import '../services/pdf/generateTicket.dart';
 import 'settings.dart';
-import 'ReporteCaja.dart';
-import 'ticket_model.dart';
-import 'sunday_ticket_model.dart';
+import '../models/ReporteCaja.dart';
+import '../models/ticket_model.dart';
+import '../models/sunday_ticket_model.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'generate_mo_ticket.dart';
-import 'ComprobanteModel.dart';
-import 'pdf_optimizer.dart';
-import 'pdfReport_generator.dart'; // Add explicit import for PdfReportGenerator
+import '../services/pdf/generate_mo_ticket.dart';
+import '../models/ComprobanteModel.dart';
+import '../services/pdf/pdf_optimizer.dart';
+import '../services/pdf/pdfReport_generator.dart'; // Add explicit import for PdfReportGenerator
 
 
 class Home extends StatefulWidget {

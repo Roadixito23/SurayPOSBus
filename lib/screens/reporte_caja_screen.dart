@@ -6,12 +6,12 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'ReporteCaja.dart';
-import 'pdfReport_generator.dart';
-import 'pdf_optimizer.dart';
-import 'app_theme.dart';
-import 'app_animations.dart';
-import 'report_cleaner.dart';
+import '../models/ReporteCaja.dart';
+import '../services/pdf/pdfReport_generator.dart';
+import '../services/pdf/pdf_optimizer.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_animations.dart';
+import '../services/report/report_cleaner.dart';
 import 'reporte_recovery.dart'; // Import for navigation
 
 class ReporteCajaScreen extends StatefulWidget {

@@ -5,9 +5,9 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'app_theme.dart';
-import 'app_animations.dart';
-import 'report_cleaner.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_animations.dart';
+import '../services/report/report_cleaner.dart';
 
 class RecoveryReport extends StatefulWidget {
   @override

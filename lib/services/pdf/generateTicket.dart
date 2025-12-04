@@ -3,7 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
-import 'ComprobanteModel.dart';
+import '../../models/ComprobanteModel.dart';
 import 'pdf_optimizer.dart';
 
 class GenerateTicket {
