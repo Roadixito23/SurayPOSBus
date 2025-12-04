@@ -84,7 +84,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       setState(() {
         _resourcesLoaded = true;
         _loadingProgress = 1.0;
-        _loadingStatus = "¡Listo!";
+        _loadingStatus = "¡Iniciando...!";
       });
 
       // Navigate to home screen after a short delay

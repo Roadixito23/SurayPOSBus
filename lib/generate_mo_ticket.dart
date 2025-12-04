@@ -8,7 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ComprobanteModel.dart';
-import 'pdf_optimizer.dart'; // Import our optimizer
+import 'pdf_optimizer.dart';
 
 class MoTicketGenerator {
   // Use our optimizer
@@ -159,60 +159,180 @@ class MoTicketGenerator {
     final formatter = NumberFormat('#,##0', 'es_CL');
     final formattedTotal = formatter.format(total);
 
-    // Crear la página del PDF con formato para rollo de 58mm
+    // Crear la página del PDF
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat(pdfWidth, double.infinity),
         build: (pw.Context context) {
           return pw.Column(
-            mainAxisAlignment: pw.MainAxisAlignment.start,
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-              // Use our optimized header component
-              PdfTicketComponents.buildHeader(_optimizer.getLogoImage(),comprobante),
+              // Header idéntico a generateTicket
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    width: pdfWidth * 0.4,
+                    child: pw.Image(_optimizer.getLogoImage()),
+                  ),
+                  pw.Spacer(),
+                  pw.Container(
+                    width: pdfWidth * 0.5,
+                    padding: pw.EdgeInsets.all(2),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+                    child: pw.Column(
+                      mainAxisAlignment: pw.MainAxisAlignment.center,
+                      children: [
+                        pw.Text('COMPROBANTE DE',
+                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('PAGO EN BUS',
+                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 2),
+                        pw.Text('N° $comprobante',
+                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
               pw.SizedBox(height: 5),
 
-              // Add reprint indicator if needed
+              // Reimpresión indicador
               if (isReprint)
-              // Simplified title
-              pw.Text('Oferta en Ruta',
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-                textAlign: pw.TextAlign.center,
-              ),
-              pw.SizedBox(height: 5),
-
-              // Simplified table using our components
-              PdfTicketComponents.buildSimplifiedTable(offerEntries),
-
-              pw.SizedBox(height: 5),
-
-              // Total amount
-              pw.Text('Total: \$$formattedTotal',
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-                textAlign: pw.TextAlign.center,
-              ),
-
-              pw.SizedBox(height: 5),
-
-              // Validity text
-              pw.Text('Válido hora y fecha señalada',
-                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-                textAlign: pw.TextAlign.center,
-              ),
-
-              pw.SizedBox(height: 3),
-
-              // Add reprint date if needed
-              if (isReprint) ...[
-                pw.SizedBox(height: 5),
-                pw.Text(
-                  'Reimpreso: $currentDate $currentTime',
-                  style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic),
-                  textAlign: pw.TextAlign.center,
+                pw.Container(
+                  padding: pw.EdgeInsets.symmetric(vertical: 2, horizontal: 5),
+                  decoration: pw.BoxDecoration(
+                      border: pw.Border.all(),
+                      color: PdfColors.grey200),
+                  child: pw.Text('REIMPRESIÓN',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                 ),
-              ],
+              // Título de la oferta
+              pw.Text('Oferta en Ruta',
+                  style: pw.TextStyle(fontSize: 12)),
 
-              // Footer image
+              pw.SizedBox(height: 5),
+
+              // Tabla simplificada de ofertas con estilo similar - MODIFICADO
+              pw.Center(  // Añadir Center aquí
+                child: pw.Container(
+                  width: pdfWidth * 0.9,  // Opcional: controlar el ancho de la tabla
+                  decoration: pw.BoxDecoration(border: pw.Border.all()),
+                  child: pw.Table(
+                    border: pw.TableBorder.all(width: 0.5),
+                    columnWidths: {
+                      0: pw.FlexColumnWidth(1), // Cantidad
+                      1: pw.FlexColumnWidth(2), // Precio unitario
+                    },
+                    children: [
+                      // Encabezados
+                      pw.TableRow(
+                        decoration: pw.BoxDecoration(color: PdfColors.grey100),
+                        children: [
+                          pw.Padding(
+                            padding: pw.EdgeInsets.all(3),
+                            child: pw.Text(
+                              'Cant. Pax.',
+                              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: pw.EdgeInsets.all(3),
+                            child: pw.Text(
+                              'Precio Unitario',
+                              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Filas de datos
+                      ...offerEntries.map((entry) {
+                        final qty = int.tryParse(entry['number']?.toString() ?? '') ?? 0;
+                        final price = double.tryParse(entry['value']?.toString() ?? '') ?? 0.0;
+
+                        return pw.TableRow(
+                          children: [
+                            pw.Padding(
+                              padding: pw.EdgeInsets.all(3),
+                              child: pw.Text(
+                                qty.toString(),
+                                style: pw.TextStyle(fontSize: 9),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                            pw.Padding(
+                              padding: pw.EdgeInsets.all(3),
+                              child: pw.Text(
+                                '\$${formatter.format(price)}',
+                                style: pw.TextStyle(fontSize: 9),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                ),
+              ),
+
+              pw.SizedBox(height: 5),
+
+              // Total en recuadro similar a generateTicket
+              pw.Container(
+                padding: pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                decoration: pw.BoxDecoration(border: pw.Border.all()),
+                child: pw.Text('Total: \$$formattedTotal',
+                    style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+              ),
+
+              pw.SizedBox(height: 5),
+
+              // Contenedor para alinear textos igual que generateTicket
+              pw.Container(
+                width: pdfWidth - 10,
+                padding: pw.EdgeInsets.symmetric(horizontal: 5),
+                child: pw.Column(
+                  children: [
+                    // Texto "Válido hora y fecha señalada"
+                    pw.Center(
+                      child: pw.Text(
+                        'Válido hora y fecha señalada',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.SizedBox(height: 3),
+                    // Hora y fecha sin prefijos, alineados a los extremos
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          currentTime,
+                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.Text(
+                          currentDate,
+                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Reimpresión fecha si aplica
+              if (isReprint)
+                pw.Padding(
+                  padding: pw.EdgeInsets.only(top: 5),
+                  child: pw.Text(
+                      'Reimpreso: $currentDate $currentTime',
+                      style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic)),
+                ),
+
+              // Imagen final
               pw.Image(_optimizer.getEndImage()),
             ],
           );

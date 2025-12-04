@@ -5,20 +5,31 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'app_theme.dart';
+import 'app_animations.dart';
+import 'report_cleaner.dart';
 
 class RecoveryReport extends StatefulWidget {
   @override
   _RecoveryReportState createState() => _RecoveryReportState();
 }
 
-class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProviderStateMixin {
+class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStateMixin {
   // Variables para gestionar la retención de archivos
-  final int _retentionPeriodDays = 14; // Período de retención: 14 días (sin límite de cantidad)
+  final int _retentionPeriodDays = 30; // Período de retención: 30 días
 
   List<FileSystemEntity> pdfFiles = [];
   bool isLoading = true;
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
+  String searchQuery = '';
+
+  // Propiedades para estadísticas
+  Map<String, dynamic> _reportStats = {};
+
+  // Controladores para animaciones
+  late AnimationController _fadeController;
+  late AnimationController _staggeredController;
+  late AnimationController _pulseController;
+  late AnimationController _shimmerController;
 
   @override
   void initState() {
@@ -26,22 +37,57 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
     // Inicializar los datos de formato de fecha para español
     initializeDateFormatting('es_ES', null);
 
-    _animationController = AnimationController(
+    // Inicializar controladores de animación
+    _fadeController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 800),
+      duration: AppTheme.animationDuration,
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0)
-        .animate(CurvedAnimation(parent: _animationController, curve: Curves.easeIn));
+    _staggeredController = AnimationController(
+      vsync: this,
+      duration: AppTheme.longAnimationDuration,
+    );
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 2),
+    );
+
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 1500),
+    );
+
+    // Iniciar las animaciones
+    _fadeController.forward();
+    _staggeredController.forward();
 
     _loadPdfFiles(); // Cargar los archivos PDF al iniciar
-    _animationController.forward();
+    _loadReportStatistics();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _fadeController.dispose();
+    _staggeredController.dispose();
+    _pulseController.dispose();
+    _shimmerController.dispose();
     super.dispose();
+  }
+
+  // Método para cargar estadísticas de reportes
+  Future<void> _loadReportStatistics() async {
+    try {
+      final stats = await ReportCleaner.getReportStatistics();
+
+      if (mounted) {
+        setState(() {
+          _reportStats = stats;
+        });
+      }
+    } catch (e) {
+      print('Error al cargar estadísticas: $e');
+    }
   }
 
   Future<void> _loadPdfFiles() async {
@@ -57,18 +103,14 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
       // Filtrar por archivos PDF
       final List<FileSystemEntity> allPdfFiles = files.where((file) => file.path.endsWith('.pdf')).toList();
 
-      // Filtrar archivos más antiguos que 14 días
-      List<FileSystemEntity> filesToDelete = [];
+      // Filtrar archivos más antiguos que el período de retención
       List<FileSystemEntity> filesToKeep = [];
 
       for (var file in allPdfFiles) {
         final fileStats = File(file.path).statSync();
         final fileDate = fileStats.modified;
 
-        if (fileDate.isBefore(cutoffDate)) {
-          // Archivo más antiguo que 14 días
-          filesToDelete.add(file);
-        } else {
+        if (fileDate.isAfter(cutoffDate) || fileDate.isAtSameMomentAs(cutoffDate)) {
           // Archivo dentro del período de retención
           filesToKeep.add(file);
         }
@@ -76,11 +118,6 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
 
       // Ordenar por fecha de modificación (más reciente primero)
       filesToKeep.sort((a, b) => File(b.path).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()));
-
-      // Eliminar los archivos marcados para eliminación
-      for (var file in filesToDelete) {
-        await File(file.path).delete();
-      }
 
       setState(() {
         pdfFiles = filesToKeep;
@@ -90,10 +127,42 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
       setState(() {
         isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al cargar archivos: $e')),
-      );
+      _showSnackBar('Error al cargar archivos: $e', AppTheme.coral);
     }
+  }
+
+  // Filtrar archivos PDF por búsqueda
+  List<FileSystemEntity> get filteredPdfFiles {
+    if (searchQuery.isEmpty) {
+      return pdfFiles;
+    }
+
+    return pdfFiles.where((file) {
+      final fileName = file.path.split('/').last.toLowerCase();
+      return fileName.contains(searchQuery.toLowerCase());
+    }).toList();
+  }
+
+  // Método para mostrar SnackBar con estilo personalizado
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            fontFamily: AppTheme.fontDefault,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        margin: EdgeInsets.all(8),
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
 
   // Obtener la fecha de creación formateada
@@ -101,7 +170,7 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
     try {
       final fileStats = File(file.path).statSync();
       final DateTime dateTime = fileStats.modified;
-      return DateFormat('dd/MM/yyyy - HH:mm').format(dateTime);
+      return DateFormat('dd/MM/yyyy - HH:mm', 'es_ES').format(dateTime);
     } catch (e) {
       return 'Fecha desconocida';
     }
@@ -171,11 +240,11 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
   // Obtener el color para el indicador de tiempo restante
   Color _getTimeRemainingColor(int daysRemaining) {
     if (daysRemaining > 7) {
-      return Colors.green; // Más de 1 semana: verde
+      return AppTheme.turquoise; // Más de 1 semana: turquesa
     } else if (daysRemaining > 3) {
-      return Colors.orange; // Entre 3-7 días: naranja
+      return AppTheme.coral.withOpacity(0.7); // Entre 3-7 días: coral con opacidad
     } else {
-      return Colors.red; // Menos de 3 días: rojo
+      return AppTheme.coral; // Menos de 3 días: coral
     }
   }
 
@@ -204,19 +273,23 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
       barrierDismissible: false,
       builder: (context) => Dialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.turquoise),
               ),
               SizedBox(height: 20),
               Text(
                 'Enviando a impresora...',
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(
+                  fontFamily: AppTheme.fontHemiheads,
+                  fontSize: 16,
+                  color: AppTheme.turquoiseDark,
+                ),
               ),
             ],
           ),
@@ -236,46 +309,120 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
       );
 
       // Mostrar mensaje de éxito
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Documento enviado a impresora'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showSnackBar('Documento enviado a impresora', AppTheme.turquoise);
     } catch (e) {
       // Mostrar un mensaje de error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al imprimir el PDF: $e'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
-      );
+      _showSnackBar('Error al imprimir el PDF: $e', AppTheme.coral);
     } finally {
       // Cerrar el indicador de progreso
       Navigator.of(context).pop(); // Cerrar el diálogo de carga
     }
   }
 
+  // Widget para mostrar estadísticas
+  Widget _buildStatsWidget() {
+    final totalReports = _reportStats['totalReports'] ?? 0;
+    final sizeMB = _reportStats['totalSizeMB'] ?? '0';
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildStatCard(
+            icon: Icons.folder,
+            title: 'Total',
+            value: '$totalReports',
+            color: AppTheme.turquoiseDark,
+          ),
+          _buildStatCard(
+            icon: Icons.date_range,
+            title: 'Últimos 7 días',
+            value: '${_reportStats['reportsLastWeek'] ?? 0}',
+            color: AppTheme.coral,
+          ),
+          _buildStatCard(
+            icon: Icons.storage,
+            title: 'Espacio',
+            value: '$sizeMB MB',
+            color: AppTheme.turquoiseDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Construir tarjeta de estadística
+  Widget _buildStatCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.28,
+        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontFamily: AppTheme.fontHemiheads,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'Reporte Semanal',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+        title: Row(
+          children: [
+            Text(
+              'Histórico',
+              style: TextStyle(
+                fontFamily: AppTheme.fontHemiheads,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
-        backgroundColor: Colors.teal.shade600,
-        elevation: 8,
+        backgroundColor: AppTheme.turquoise,
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
         ),
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
             tooltip: 'Actualizar',
-            onPressed: _loadPdfFiles,
+            onPressed: () {
+              _loadPdfFiles();
+              _loadReportStatistics();
+            },
           ),
           IconButton(
             icon: Icon(Icons.info_outline),
@@ -284,12 +431,18 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: Text('Información', style: TextStyle(color: Colors.teal)),
+                  title: Text(
+                    'Información',
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontHemiheads,
+                      color: AppTheme.turquoiseDark,
+                    ),
+                  ),
                   content: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Esta sección le permite ver e imprimir los reportes semanales generados por el sistema.'),
+                      Text('Esta sección le permite ver e imprimir los reportes generados por el sistema.'),
                       SizedBox(height: 12),
                       Text('Política de retención:', style: TextStyle(fontWeight: FontWeight.bold)),
                       Text('• Se conservan todos los reportes de los últimos $_retentionPeriodDays días.'),
@@ -297,21 +450,21 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
                       SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.circle, size: 12, color: Colors.green),
+                          Icon(Icons.circle, size: 12, color: AppTheme.turquoise),
                           SizedBox(width: 4),
                           Text('Más de 7 días restantes'),
                         ],
                       ),
                       Row(
                         children: [
-                          Icon(Icons.circle, size: 12, color: Colors.orange),
+                          Icon(Icons.circle, size: 12, color: AppTheme.coral.withOpacity(0.7)),
                           SizedBox(width: 4),
                           Text('Entre 3-7 días restantes'),
                         ],
                       ),
                       Row(
                         children: [
-                          Icon(Icons.circle, size: 12, color: Colors.red),
+                          Icon(Icons.circle, size: 12, color: AppTheme.coral),
                           SizedBox(width: 4),
                           Text('Menos de 3 días restantes'),
                         ],
@@ -320,11 +473,11 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
                   ),
                   actions: [
                     TextButton(
-                      child: Text('OK', style: TextStyle(color: Colors.teal)),
+                      child: Text('OK', style: TextStyle(color: AppTheme.turquoise)),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
               );
             },
@@ -332,245 +485,527 @@ class _RecoveryReportState extends State<RecoveryReport> with SingleTickerProvid
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.teal.shade50, Colors.white],
-          ),
-        ),
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: isLoading
-              ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.teal)),
-                SizedBox(height: 20),
-                Text('Cargando reportes...', style: TextStyle(fontSize: 16, color: Colors.teal.shade700)),
-              ],
-            ),
-          )
-              : pdfFiles.isEmpty
-              ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.folder_open, size: 80, color: Colors.teal.withOpacity(0.4)),
-                SizedBox(height: 16),
-                Text(
-                  'No hay archivos PDF guardados',
-                  style: TextStyle(fontSize: 18, color: Colors.teal.shade700),
+        decoration: AppTheme.gradientBackground,
+        child: Column(
+          children: [
+            // Barra de búsqueda
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: TextField(
+                onChanged: (value) {
+                  setState(() {
+                    searchQuery = value;
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'Buscar reportes...',
+                  prefixIcon: Icon(Icons.search, color: AppTheme.turquoise),
+                  suffixIcon: searchQuery.isNotEmpty
+                      ? IconButton(
+                    icon: Icon(Icons.clear, color: AppTheme.coral),
+                    onPressed: () {
+                      setState(() {
+                        searchQuery = '';
+                      });
+                    },
+                  )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppTheme.turquoise, width: 2),
+                  ),
                 ),
-                SizedBox(height: 8),
-                Text(
-                  'Los reportes semanales se generarán automáticamente',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+              ),
             ),
-          )
-              : ListView.builder(
-            itemCount: pdfFiles.length,
-            padding: EdgeInsets.all(12),
-            itemBuilder: (context, index) {
-              final file = pdfFiles[index];
-              final originalFileName = file.path.split('/').last;
-              final formattedFileName = _formatFileName(file);
-              final fileNumber = _extractFileNumber(originalFileName);
 
-              return Card(
-                margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    // Opcional: mostrar previsualización o más opciones
-                    showModalBottomSheet(
-                      context: context,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                      ),
-                      builder: (context) => Container(
-                        padding: EdgeInsets.all(20),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              fileNumber.isNotEmpty
-                                  ? '$formattedFileName - Reporte #$fileNumber'
-                                  : formattedFileName,
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
-                            ),
-                            Text(
-                              originalFileName,
-                              style: TextStyle(fontSize: 14, color: Colors.grey),
-                              textAlign: TextAlign.center,
-                            ),
-                            SizedBox(height: 20),
-                            ListTile(
-                              leading: Icon(Icons.print, color: Colors.teal),
-                              title: Text('Imprimir reporte'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                _printPdf(file);
-                              },
-                            ),
-                            ListTile(
-                              leading: Icon(Icons.remove_red_eye, color: Colors.blue),
-                              title: Text('Ver detalles'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                // Implementar visualización de detalles aquí
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
+            // Estadísticas
+            AnimatedBuilder(
+              animation: _fadeController,
+              builder: (context, child) {
+                return FadeTransition(
+                  opacity: _fadeController,
+                  child: child,
+                );
+              },
+              child: _buildStatsWidget(),
+            ),
+
+            // Lista de reportes
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  await _loadPdfFiles();
+                  await _loadReportStatistics();
+                },
+                color: AppTheme.turquoise,
+                child: isLoading
+                    ? Center(
+                  child: AppAnimations.shimmerLoading(
+                    controller: _shimmerController,
+                    baseColor: Colors.grey.shade300,
+                    highlightColor: Colors.white,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
-                          padding: EdgeInsets.all(12),
+                          width: 50,
+                          height: 50,
                           decoration: BoxDecoration(
-                            color: Colors.teal.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Icon(
-                                Icons.picture_as_pdf,
-                                color: Colors.red.shade700,
-                                size: 32,
-                              ),
-                              if (fileNumber.isNotEmpty)
-                                Positioned(
-                                  right: -5,
-                                  top: -5,
-                                  child: Container(
-                                    padding: EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.teal,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Text(
-                                      fileNumber,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
+                            color: Colors.grey.shade300,
+                            shape: BoxShape.circle,
                           ),
                         ),
-                        SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      formattedFileName,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  if (fileNumber.isNotEmpty)
-                                    Container(
-                                      margin: EdgeInsets.only(left: 4),
-                                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.teal.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '#$fileNumber',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.teal.shade800,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(Icons.timer, size: 14, color:
-                                  _getTimeRemainingColor(_getDaysRemainingBeforeDeletion(file))),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Se elimina en ${_getDaysRemainingBeforeDeletion(file)} días',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: _getTimeRemainingColor(_getDaysRemainingBeforeDeletion(file)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(Icons.access_time, size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    _getFormattedDate(file),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 2),
-                              Row(
-                                children: [
-                                  Icon(Icons.data_usage, size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    _getFileSize(file),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                        SizedBox(height: 16),
+                        Container(
+                          width: 200,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.print, color: Colors.teal),
-                          tooltip: 'Imprimir',
-                          onPressed: () => _printPdf(file),
                         ),
                       ],
                     ),
                   ),
+                )
+                    : filteredPdfFiles.isEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        searchQuery.isEmpty ? Icons.folder_open : Icons.search_off,
+                        size: 80,
+                        color: AppTheme.turquoiseLight,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        searchQuery.isEmpty
+                            ? 'No hay reportes guardados'
+                            : 'No se encontraron resultados',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontHemiheads,
+                          fontSize: 18,
+                          color: AppTheme.turquoiseDark,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        searchQuery.isEmpty
+                            ? 'Los reportes se generarán automáticamente'
+                            : 'Intenta con otra búsqueda',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade700,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+                    : AnimatedBuilder(
+                  animation: _staggeredController,
+                  builder: (context, child) {
+                    return ListView.builder(
+                      itemCount: filteredPdfFiles.length,
+                      padding: EdgeInsets.all(12),
+                      itemBuilder: (context, index) {
+                        final file = filteredPdfFiles[index];
+                        final originalFileName = file.path.split('/').last;
+                        final formattedFileName = _formatFileName(file);
+                        final fileNumber = _extractFileNumber(originalFileName);
+                        final daysRemaining = _getDaysRemainingBeforeDeletion(file);
+
+                        // Crear animación escalonada
+                        final Animation<double> animation = CurvedAnimation(
+                          parent: _staggeredController,
+                          curve: Interval(
+                            0.05 * (index % 15), // Repetir cada 15 elementos
+                            1.0,
+                            curve: Curves.easeOutQuart,
+                          ),
+                        );
+
+                        return AppAnimations.fadeInUp(
+                          animation: animation,
+                          child: Card(
+                            margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                            elevation: 3,
+                            shadowColor: Colors.black26,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                // Mostrar opciones
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                    ),
+                                    padding: EdgeInsets.all(24),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 5,
+                                          margin: EdgeInsets.only(bottom: 24),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade300,
+                                            borderRadius: BorderRadius.circular(3),
+                                          ),
+                                        ),
+                                        Text(
+                                          fileNumber.isNotEmpty
+                                              ? '$formattedFileName - Reporte #$fileNumber'
+                                              : formattedFileName,
+                                          style: TextStyle(
+                                            fontFamily: AppTheme.fontHemiheads,
+                                            fontSize: 20,
+                                            color: AppTheme.turquoiseDark,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        SizedBox(height: 8),
+                                        Text(
+                                          originalFileName,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        SizedBox(height: 24),
+                                        ListTile(
+                                          leading: CircleAvatar(
+                                            backgroundColor: AppTheme.turquoiseLight,
+                                            child: Icon(Icons.print, color: AppTheme.turquoiseDark),
+                                          ),
+                                          title: Text(
+                                            'Imprimir reporte',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          subtitle: Text('Enviar a impresora conectada'),
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            _printPdf(file);
+                                          },
+                                        ),
+                                        Divider(),
+                                        ListTile(
+                                          leading: CircleAvatar(
+                                            backgroundColor: AppTheme.coralLight,
+                                            child: Icon(Icons.remove_red_eye, color: AppTheme.coral),
+                                          ),
+                                          title: Text(
+                                            'Ver detalles',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          subtitle: Text('Información detallada del reporte'),
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            // Implementar visualización de detalles aquí
+                                            _showSnackBar(
+                                                'Función de visualización en desarrollo',
+                                                Colors.blue
+                                            );
+                                          },
+                                        ),
+                                        SizedBox(height: 16),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Row(
+                                  children: [
+                                    // Icono del PDF con círculo de número
+                                    Container(
+                                      padding: EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 5,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.picture_as_pdf,
+                                            color: AppTheme.coral,
+                                            size: 32,
+                                          ),
+                                          if (fileNumber.isNotEmpty)
+                                            Positioned(
+                                              right: -8,
+                                              top: -8,
+                                              child: Container(
+                                                padding: EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.turquoise,
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.1),
+                                                      blurRadius: 2,
+                                                      offset: Offset(0, 1),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Text(
+                                                  fileNumber,
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(width: 16),
+
+                                    // Información del reporte
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  formattedFileName,
+                                                  style: TextStyle(
+                                                    fontFamily: AppTheme.fontHemiheads,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppTheme.turquoiseDark,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(height: 8),
+
+                                          // Días para expiración
+                                          Container(
+                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: _getTimeRemainingColor(daysRemaining).withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: _getTimeRemainingColor(daysRemaining),
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.timer,
+                                                  size: 14,
+                                                  color: _getTimeRemainingColor(daysRemaining),
+                                                ),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  daysRemaining > 0
+                                                      ? 'Expira en $daysRemaining días'
+                                                      : 'Expira hoy',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: _getTimeRemainingColor(daysRemaining),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+
+                                          SizedBox(height: 8),
+
+                                          // Fecha y tamaño
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.calendar_today,
+                                                size: 14,
+                                                color: Colors.grey,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                _getFormattedDate(file),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade700,
+                                                ),
+                                              ),
+                                              SizedBox(width: 6),
+                                              Icon(
+                                                Icons.storage,
+                                                size: 14,
+                                                color: Colors.grey,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                _getFileSize(file),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    // Botón de impresión
+                                    ElevatedButton(
+                                      onPressed: () => _printPdf(file),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.turquoise,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.print, size: 18)
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+          ],
         ),
+      ),
+      // Botón flotante para gestionar reportes
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: Colors.transparent,
+            builder: (context) => Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Gestión de Reportes',
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontHemiheads,
+                      fontSize: 20,
+                      color: AppTheme.turquoiseDark,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppTheme.coralLight,
+                      child: Icon(Icons.cleaning_services, color: AppTheme.coral),
+                    ),
+                    title: Text('Limpiar reportes antiguos'),
+                    subtitle: Text('Eliminar reportes con más de 30 días'),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      bool confirm = await showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Text(
+                            'Confirmar Limpieza',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontHemiheads,
+                              color: AppTheme.coral,
+                            ),
+                          ),
+                          content: Text(
+                            '¿Está seguro de que desea eliminar los reportes vencidos? Esta acción no se puede deshacer.',
+                          ),
+                          actions: [
+                            TextButton(
+                              child: Text('Cancelar'),
+                              onPressed: () => Navigator.of(context).pop(false),
+                            ),
+                            ElevatedButton(
+                              child: Text('Confirmar'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.coral,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(true),
+                            ),
+                          ],
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ) ?? false;
+
+                      if (confirm) {
+                        int count = await ReportCleaner.cleanExpiredReportsOnStartup();
+                        _loadPdfFiles();
+                        _loadReportStatistics();
+                        _showSnackBar(
+                            'Se eliminaron $count reportes vencidos',
+                            AppTheme.turquoise
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        backgroundColor: AppTheme.turquoise,
+        child: Icon(Icons.more_vert),
       ),
     );
   }

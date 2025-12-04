@@ -21,6 +21,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   bool isAuthenticated = false;
   double _textSizeMultiplier = 0.8;
   bool _showIcons = true;
+  double _pdfEndMargin = 69.0; // Valor por defecto
 
   Future<bool> _showComprobanteAuthDialog() async {
     final prefs = await SharedPreferences.getInstance();
@@ -166,7 +167,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   // Flag to track if settings have changed
   bool _settingsChanged = false;
 
-  final String appVersion = '01.05.25';
+  final String appVersion = '20.05.25';
 
   // Variables para TabController
   late TabController _tabController;
@@ -201,6 +202,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     _loadAbbreviations();
     _loadButtonIconPreferences();
     _loadAppBarConfig();
+    _loadPdfEndMargin(); // Agregar esta línea
     _tabController = TabController(length: 5, vsync: this); // Changed from 4 to 5 tabs
   }
 
@@ -209,15 +211,11 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     _tabController.dispose();
     passwordController.dispose();
     idController.dispose();
-
-    // Liberar controladores de abreviaturas
     _abbreviationControllers.values.forEach((controller) =>
         controller.dispose());
 
     super.dispose();
   }
-
-  // Function to get IconData from string name
   IconData _getIconFromString(String iconName) {
     switch (iconName) {
       case 'people':
@@ -1070,7 +1068,79 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
               ),
             ),
           ),
-
+          SizedBox(height: 20),
+          _buildSectionCard(
+            title: 'Margen Final PDF',
+            icon: Icons.picture_as_pdf,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ajuste el margen antes de la línea negra final en los PDFs',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              'Margen: ${_pdfEndMargin.toInt()}px',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            Slider(
+                              value: _pdfEndMargin,
+                              min: 10,
+                              max: 150,
+                              divisions: 14,
+                              label: '${_pdfEndMargin.toInt()}px',
+                              activeColor: primaryColor,
+                              onChanged: (value) {
+                                setState(() {
+                                  _pdfEndMargin = value;
+                                });
+                              },
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('10px', style: TextStyle(color: Colors.grey[600])),
+                                Text('Default: 69px', style: TextStyle(color: Colors.grey[600])),
+                                Text('150px', style: TextStyle(color: Colors.grey[600])),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _savePdfEndMargin,
+                      icon: Icon(Icons.save),
+                      label: Text('Guardar Margen'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           SizedBox(height: 20),
           _buildBackupRestoreSection(),
           SizedBox(height: 20),
@@ -2378,5 +2448,51 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
         ),
       ),
     );
+  }
+// Método para cargar el margen final del PDF
+  Future<void> _loadPdfEndMargin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _pdfEndMargin = prefs.getDouble('pdfEndMargin') ?? 69.0;
+      });
+      print('PDF end margin loaded: $_pdfEndMargin');
+    } catch (e) {
+      print('Error loading PDF end margin: $e');
+    }
+  }
+
+// Método para guardar el margen final del PDF
+  Future<void> _savePdfEndMargin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('pdfEndMargin', _pdfEndMargin);
+
+      // Set flag that settings have changed
+      _settingsChanged = true;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 10),
+              Text('Margen PDF guardado correctamente'),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green,
+        ),
+      );
+      print('PDF end margin saved: $_pdfEndMargin');
+    } catch (e) {
+      print('Error saving PDF end margin: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al guardar margen PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

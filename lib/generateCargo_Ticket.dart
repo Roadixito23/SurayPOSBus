@@ -4,9 +4,10 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'ComprobanteModel.dart';
 import 'ReporteCaja.dart';
-import 'pdf_optimizer.dart'; // Import the optimizer
+import 'pdf_optimizer.dart';
 
 class CargoTicketGenerator {
   final ComprobanteModel comprobanteModel;
@@ -14,6 +15,9 @@ class CargoTicketGenerator {
   final _priceFmt = NumberFormat('#,##0', 'es_CL');
   final _pdfWidth = 58 * PdfPageFormat.mm;
   final _pdfHeight = PdfPageFormat.a4.height;
+
+  // Configurable height for tape rectangle (changed from 15 to 30)
+  final double tapeRectangleHeight = 45.0;
 
   // Use our new optimizer
   final PdfOptimizer _optimizer = PdfOptimizer();
@@ -29,7 +33,7 @@ class CargoTicketGenerator {
     }
   }
 
-  pw.Document _createDoc() => _optimizer.createDocument(); // Use optimized document
+  pw.Document _createDoc() => _optimizer.createDocument();
 
   pw.Page _createPage(pw.Widget content) => pw.Page(
     pageFormat: PdfPageFormat(_pdfWidth, _pdfHeight),
@@ -38,8 +42,33 @@ class CargoTicketGenerator {
 
   // Simplified header builder
   pw.Widget _buildHeader(String ticketId) {
-    return PdfTicketComponents.buildHeader(_optimizer.getLogoImage(), ticketId);
-
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(
+          width: _pdfWidth * 0.4,
+          child: pw.Image(_optimizer.getLogoImage()),
+        ),
+        pw.Spacer(),
+        pw.Container(
+          width: _pdfWidth * 0.5,
+          padding: pw.EdgeInsets.all(2),
+          decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+          child: pw.Column(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: [
+              pw.Text('COMPROBANTE DE',
+                  style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              pw.Text('PAGO EN BUS',
+                  style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 2),
+              pw.Text('N° $ticketId',
+                  style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   // Simplified content builder
@@ -187,6 +216,59 @@ class CargoTicketGenerator {
     );
   }
 
+  // New method for delivery info box
+  pw.Widget _buildDeliveryInfoBox() {
+    return pw.Container(
+      padding: pw.EdgeInsets.all(6),
+      decoration: pw.BoxDecoration(border: pw.Border.all()),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            children: [
+              pw.Text('Entregado el día: ', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('____', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('/', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('____', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('/', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('________', style: pw.TextStyle(fontSize: 10)),
+            ],
+          ),
+          pw.SizedBox(height: 8),
+          pw.Row(
+            children: [
+              pw.Text('A las: ', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('____', style: pw.TextStyle(fontSize: 10)),
+              pw.Text(' : ', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('____', style: pw.TextStyle(fontSize: 10)),
+              pw.Text(' Hrs.', style: pw.TextStyle(fontSize: 10)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper method to create the tape placement rectangle - now using configurable height
+  pw.Widget _buildTapeRectangle() {
+    return pw.Container(
+      width: double.infinity,
+      height: tapeRectangleHeight, // Using the configurable height
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(width: 4, color: PdfColors.black),
+      ),
+      child: pw.Center(
+        child: pw.Text(
+          'COLOCAR CINTA',
+          style: pw.TextStyle(
+            fontSize: 16,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
   // Optimized method to generate and print cargo PDFs
   Future<void> generateNewCargoPdf(
       String destinatario,
@@ -309,6 +391,10 @@ class CargoTicketGenerator {
       _createPage(
         pw.Column(
           children: [
+            // Tape rectangle at the top
+            _buildTapeRectangle(),
+            pw.SizedBox(height: 8),
+
             _buildHeader(ticketId),
             pw.SizedBox(height: 4),
             pw.Center(
@@ -328,6 +414,16 @@ class CargoTicketGenerator {
               time,
             ),
             pw.SizedBox(height: 12),
+
+            // Add end image BEFORE the cut line
+            pw.Center(child: pw.Image(_optimizer.getEndImage(), width: _pdfWidth * 0.8)),
+            pw.SizedBox(height: 8),
+
+            // Tape rectangle BEFORE cut line with scissors
+            _buildTapeRectangle(),
+            pw.SizedBox(height: 8),
+
+            // Cut line with scissors
             pw.Row(
               children: [
                 pw.Padding(
@@ -358,6 +454,8 @@ class CargoTicketGenerator {
             ),
             pw.SizedBox(height: 4),
             _buildControlInternoBox(ticketId, articulo, precio, date),
+            pw.SizedBox(height: 8),
+            _buildDeliveryInfoBox(),
             pw.SizedBox(height: 69),
             pw.Container(width: double.infinity, height: 2, color: PdfColors.black),
           ],
@@ -483,6 +581,10 @@ class CargoTicketGenerator {
       _createPage(
         pw.Column(
           children: [
+            // Tape rectangle at the top
+            _buildTapeRectangle(),
+            pw.SizedBox(height: 8),
+
             _buildHeader(ticketId),
             pw.SizedBox(height: 4),
             pw.Center(
@@ -502,6 +604,16 @@ class CargoTicketGenerator {
               time,
             ),
             pw.SizedBox(height: 12),
+
+            // Add end image BEFORE the cut line
+            pw.Center(child: pw.Image(_optimizer.getEndImage(), width: _pdfWidth * 0.8)),
+            pw.SizedBox(height: 8),
+
+            // Tape rectangle BEFORE cut line with scissors
+            _buildTapeRectangle(),
+            pw.SizedBox(height: 8),
+
+            // Cut line with scissors
             pw.Row(
               children: [
                 pw.Padding(
@@ -532,7 +644,12 @@ class CargoTicketGenerator {
             ),
             pw.SizedBox(height: 4),
             _buildControlInternoBox(ticketId, articulo, precio, date),
+            pw.SizedBox(height: 8),
+
+            // New delivery info box
+            _buildDeliveryInfoBox(),
             pw.SizedBox(height: 69),
+            // Final cut line
             pw.Container(width: double.infinity, height: 2, color: PdfColors.black),
           ],
         ),

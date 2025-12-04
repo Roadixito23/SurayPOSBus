@@ -1,203 +1,176 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Para formatear fechas y horas
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 class ReporteCaja extends ChangeNotifier {
-  Map<String, List<Map<String, dynamic>>> _transacciones = {};
-  double _totalIngresos = 0.0;
-  bool _isAscending = true;
+  List<Map<String, dynamic>> _transactions = [];
+  int _nextId = 1;
 
-  // Getters
-  Map<String, List<Map<String, dynamic>>> get transacciones => _transacciones;
-  double get totalIngresos => _totalIngresos;
-  bool get isAscending => _isAscending;
+  // Nueva clase de transacción para guardar correctamente los datos por día
+  Map<String, dynamic> _createTransaction(String nombre, double valor, String comprobante) {
+    // Obtener día, mes, año y hora actual
+    DateTime now = DateTime.now();
+    String dia = DateFormat('dd').format(now);
+    String mes = DateFormat('MM').format(now);
+    String ano = DateFormat('yyyy').format(now);
+    String hora = DateFormat('HH:mm').format(now); // Cambiado de HH:mm:ss a HH:mm para eliminar los segundos
 
-  ReporteCaja() {
-    loadTransactions(); // Cargar transacciones al iniciar
+    return {
+      'id': _nextId++,
+      'nombre': nombre,
+      'valor': valor,
+      'comprobante': comprobante,
+      'dia': dia,
+      'mes': mes,
+      'ano': ano, // Ahora guardamos también el año
+      'hora': hora,
+      'timestamp': now.millisecondsSinceEpoch
+    };
   }
 
-  void receiveData(String nombrePasaje, double valor, String comprobante) {
-    String fecha = DateFormat('dd/MM/yyyy').format(DateTime.now());
-    String dia = DateFormat('dd').format(DateTime.now()); // Obtener el día
-    String mes = DateFormat('MM').format(DateTime.now()); // Obtener el mes
-    String hora = DateFormat('HH:mm').format(DateTime.now());
-    String id = DateTime.now().millisecondsSinceEpoch.toString();
-
-    if (!_transacciones.containsKey(fecha)) {
-      _transacciones[fecha] = [];
-    }
-
-    // Agregar la transacción con el número de comprobante
-    _transacciones[fecha]!.add({
-      'id': id,
-      'nombre': nombrePasaje,
-      'valor': valor,
-      'hora': hora,
-      'comprobante': comprobante,
-      'dia': dia, // Guardar el día
-      'mes': mes, // Guardar el mes
-    });
-
-    _totalIngresos += valor;
-    _saveTransactions();
+  // Recibir datos de ticket
+  void receiveData(String nombre, double valor, String comprobante) {
+    _transactions.add(_createTransaction(nombre, valor, comprobante));
     notifyListeners();
   }
 
-  void receiveCargoData(String destinatario, double valor, String comprobante) {
-    String fecha = DateFormat('dd/MM/yyyy').format(DateTime.now());
-    String dia = DateFormat('dd').format(DateTime.now()); // Obtener el día
-    String mes = DateFormat('MM').format(DateTime.now()); // Obtener el mes
-    String hora = DateFormat('HH:mm').format(DateTime.now());
-    String id = DateTime.now().millisecondsSinceEpoch.toString();
-
-    if (!_transacciones.containsKey(fecha)) {
-      _transacciones[fecha] = [];
-    }
-
-    // Agregar la transacción de cargo
-    _transacciones[fecha]!.add({
-      'id': id,
-      'nombre': 'Cargo: $destinatario',
-      'valor': valor,
-      'hora': hora,
-      'comprobante': comprobante,
-      'dia': dia, // Guardar el día
-      'mes': mes, // Guardar el mes
-    });
-
-    _totalIngresos += valor;
-    _saveTransactions();
+  // Recibir datos de cargo (para tickets de cargo)
+  void receiveCargoData(String destinatario, double precio, String comprobante) {
+    _transactions.add(_createTransaction('Cargo: $destinatario', precio, comprobante));
     notifyListeners();
   }
 
+  // Añadir entradas de oferta (para tickets de oferta múltiple)
   void addOfferEntries(List<double> subtotals, double total, String comprobante) {
-    String fecha = DateFormat('dd/MM/yyyy').format(DateTime.now());
-    String dia = DateFormat('dd').format(DateTime.now()); // Obtener el día
-    String mes = DateFormat('MM').format(DateTime.now()); // Obtener el mes
-    if (!_transacciones.containsKey(fecha)) {
-      _transacciones[fecha] = [];
-    }
-
-    String id = DateTime.now().millisecondsSinceEpoch.toString();
-    _transacciones[fecha]!.add({
-      'id': id,
-      'nombre': 'Oferta Ruta',
-      'valor': total,
-      'hora': DateFormat('HH:mm').format(DateTime.now()),
-      'subtotals': subtotals,
-      'comprobante': comprobante,
-      'dia': dia, // Guardar el día
-      'mes': mes, // Guardar el mes
-    });
-
-    _totalIngresos += total;
-    _saveTransactions();
+    _transactions.add(_createTransaction('Oferta Ruta', total, comprobante));
     notifyListeners();
   }
 
+  // Cancelar última transacción
   void cancelTransaction() {
-    if (_transacciones.isNotEmpty) {
-      final lastDate = _transacciones.keys.last;
-      if (_transacciones[lastDate]!.isNotEmpty) {
-        final lastTransaction = _transacciones[lastDate]!.last; // Obtener la última transacción
-        double lastValue = lastTransaction['valor'];
+    if (_transactions.isEmpty) return;
 
-        // Crear la nueva transacción con valor negativo
-        Map<String, dynamic> reversedTransaction = {
-          'id': DateTime.now().millisecondsSinceEpoch.toString(), // Nuevo ID
-          'nombre': 'Anulación: ${lastTransaction['nombre']}', // Indicar que es una anulación
-          'valor': -lastValue, // Valor negativo
-          'hora': DateFormat('HH:mm').format(DateTime.now()), // Hora actual
-          'comprobante': lastTransaction['comprobante'], // Usar el mismo comprobante
-          'dia': lastTransaction['dia'], // Usar el mismo día
-          'mes': lastTransaction['mes'], // Usar el mismo mes
-        };
-
-        // Añadir la transacción de anulación
-        _transacciones[lastDate]!.add(reversedTransaction);
-
-        // Ajustar el total restando el valor anulado
-        _totalIngresos += reversedTransaction['valor']; // Esto restará porque el valor es negativo
-
-        _saveTransactions();
-        notifyListeners();
+    // Buscar la última transacción que no sea una anulación
+    Map<String, dynamic>? lastTransaction;
+    for (int i = _transactions.length - 1; i >= 0; i--) {
+      if (!_transactions[i]['nombre'].toString().startsWith('Anulación:')) {
+        lastTransaction = _transactions[i];
+        break;
       }
     }
-  }
 
-  String formatValue(double value) {
-    return NumberFormat("#,##0", "es_ES").format(value);
-  }
+    if (lastTransaction != null) {
+      // Crear una nueva transacción de anulación
+      String nombre = 'Anulación: ${lastTransaction['nombre']}';
+      double valor = -lastTransaction['valor']; // Valor negativo
+      String comprobante = lastTransaction['comprobante'];
 
-  void clearTransactions() {
-    _transacciones.clear();
-    _totalIngresos = 0.0;
-    _saveTransactions();
-    notifyListeners();
-  }
-
-  void toggleOrder() {
-    _isAscending = !_isAscending;
-    _saveOrderPreference();
-    notifyListeners();
-  }
-
-  bool hasActiveTransactions() {
-    // Verificar si hay transacciones del día actual que no sean anulaciones
-    DateTime today = DateTime.now();
-    String todayDay = DateFormat('dd').format(today);
-    String todayMonth = DateFormat('MM').format(today);
-
-    var todayTransactions = getOrderedTransactions().where((t) =>
-    t['dia'] == todayDay && t['mes'] == todayMonth &&
-        !t['nombre'].toString().startsWith('Anulación:')
-    ).toList();
-
-    return todayTransactions.isNotEmpty;
-  }
-
-  Future<void> _saveOrderPreference() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isAscending', _isAscending);
-  }
-
-  List<Map<String, dynamic>> getOrderedTransactions() {
-    var allTransactions = _transacciones.entries.expand((entry) => entry.value).toList();
-
-    // Ordenar las transacciones según el estado de _isAscending
-    allTransactions.sort((a, b) => _isAscending ? a['id'].compareTo(b['id']) : b['id'].compareTo(a['id']));
-    return allTransactions;
-  }
-
-  Future<void> _saveTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('transactions', jsonEncode(_transacciones));
-    await prefs.setDouble('totalIngresos', _totalIngresos); // Guardar también el total de ingresos
-  }
-
-  Future<void> loadTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? transactionsJson = prefs.getString('transactions');
-    if (transactionsJson != null) {
-      Map<String, dynamic> decodedJson = jsonDecode(transactionsJson);
-      _transacciones = decodedJson.map((key, value) => MapEntry(key, List<Map<String, dynamic>>.from(value)));
-
-      // Cargar el total de ingresos guardado o recalcularlo si no está disponible
-      _totalIngresos = prefs.getDouble('totalIngresos') ?? _recalculateTotal();
-
+      _transactions.add(_createTransaction(nombre, valor, comprobante));
       notifyListeners();
     }
   }
 
-  // Método para recalcular el total basado en todas las transacciones
-  double _recalculateTotal() {
-    double total = 0.0;
-    for (var transactions in _transacciones.values) {
-      for (var transaction in transactions) {
-        total += transaction['valor'] ?? 0.0;
+  // Obtener transacciones ordenadas
+  List<Map<String, dynamic>> getOrderedTransactions() {
+    // Ordenar por ID (más antiguos primero)
+    List<Map<String, dynamic>> sortedList = List.from(_transactions);
+    sortedList.sort((a, b) => a['id'].compareTo(b['id']));
+    return sortedList;
+  }
+
+  // NUEVO: Eliminar una transacción específica por ID
+  void removeTransaction(int id) {
+    _transactions.removeWhere((t) => t['id'] == id);
+    notifyListeners();
+  }
+
+  // Calcular el total considerando anulaciones
+  double getTotal() {
+    return _transactions.fold(0, (total, transaction) {
+      return total + (transaction['valor'] ?? 0);
+    });
+  }
+
+  // Verificar si hay transacciones activas
+  bool hasActiveTransactions() {
+    return _transactions.isNotEmpty;
+  }
+
+  // Vaciar todas las transacciones
+  void clearTransactions() {
+    _transactions.clear();
+    notifyListeners();
+  }
+
+  // NUEVO: Obtener transacciones por fecha
+  List<Map<String, dynamic>> getTransactionsByDate(String day, String month, String year) {
+    return _transactions.where((t) =>
+    t['dia'] == day &&
+        t['mes'] == month &&
+        (t['ano'] == year || t['ano'] == null)
+    ).toList();
+  }
+
+  // NUEVO: Verificar si hay transacciones de días anteriores
+  bool hasPendingOldTransactions() {
+    final today = DateTime.now();
+    final todayDay = int.parse(DateFormat('dd').format(today));
+    final todayMonth = int.parse(DateFormat('MM').format(today));
+    final todayYear = today.year; // Aquí aseguramos que es int desde el principio
+
+    return _transactions.any((t) {
+      // Ignorar anulaciones
+      if (t['nombre'].toString().startsWith('Anulación:')) {
+        return false;
+      }
+
+      // Obtener fecha de la transacción y convertir a int
+      final transDay = int.tryParse(t['dia']) ?? todayDay;
+      final transMonth = int.tryParse(t['mes']) ?? todayMonth;
+      final transYear = int.tryParse(t['ano'] ?? todayYear.toString()) ?? todayYear;
+
+      // Determinar si la transacción es de un día anterior
+      if (transYear < todayYear) {
+        return true; // Año anterior
+      } else if (transYear == todayYear) {
+        if (transMonth < todayMonth) {
+          return true; // Mes anterior en el mismo año
+        } else if (transMonth == todayMonth && transDay < todayDay) {
+          return true; // Día anterior en el mismo mes
+        }
+      }
+
+      return false;
+    });
+  }
+
+
+  // NUEVO: Obtener días con transacciones pendientes
+  int getOldestPendingDays() {
+    final today = DateTime.now();
+    int maxDays = 0;
+
+    for (var transaction in _transactions) {
+      // Ignorar anulaciones
+      if (transaction['nombre'].toString().startsWith('Anulación:')) {
+        continue;
+      }
+
+      try {
+        final transDay = int.parse(transaction['dia']);
+        final transMonth = int.parse(transaction['mes']);
+        final transYear = int.parse(transaction['ano'] ?? today.year.toString());
+
+        final transDate = DateTime(transYear, transMonth, transDay);
+        final differenceInDays = today.difference(transDate).inDays;
+
+        if (differenceInDays > maxDays) {
+          maxDays = differenceInDays;
+        }
+      } catch (e) {
+        print('Error al procesar fecha: $e');
       }
     }
-    return total;
+
+    return maxDays;
   }
 }
