@@ -5,7 +5,7 @@ import 'cargo_screen.dart';
 import '../services/pdf/generateCargo_Ticket.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
-import 'reporte_caja_screen.dart' hide SharedPreferences; // Hide to avoid ambiguity
+import 'reporte_caja_screen.dart' hide SharedPreferences;
 import '../services/pdf/generateTicket.dart';
 import 'settings.dart';
 import '../models/ReporteCaja.dart';
@@ -18,8 +18,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/pdf/generate_mo_ticket.dart';
 import '../models/ComprobanteModel.dart';
 import '../services/pdf/pdf_optimizer.dart';
-import '../services/pdf/pdfReport_generator.dart'; // Add explicit import for PdfReportGenerator
 
+// Importar los nuevos módulos
+import '../services/home/pending_transaction_service.dart';
+import '../services/home/resource_preloader.dart';
+import '../services/home/maintenance_service.dart';
+import '../services/home/home_helpers.dart';
+import '../widgets/home/password_dialogs.dart';
+import '../widgets/home/reprint_dialogs.dart';
+import '../widgets/home/home_app_bar_widgets.dart';
+import '../widgets/home/home_buttons.dart';
 
 class Home extends StatefulWidget {
   @override
@@ -27,9 +35,14 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  final PdfOptimizer pdfOptimizer = PdfOptimizer(); // Add PDF optimizer
+  // Servicios
+  final PdfOptimizer pdfOptimizer = PdfOptimizer();
   final GenerateTicket generateTicket = GenerateTicket();
   final MoTicketGenerator moTicketGenerator = MoTicketGenerator();
+  late final PendingTransactionService _pendingTransactionService;
+  late final ResourcePreloader _resourcePreloader;
+
+  // Variables de estado
   bool _isButtonDisabled = false;
   bool _isLoading = false;
   late Timer _timer;
@@ -38,136 +51,38 @@ class _HomeState extends State<Home> {
   bool _hasReprinted = false;
   bool _hasAnulado = false;
   bool _isPhoneMode = true;
-  bool _resourcesPreloaded = false; // Track if resources are preloaded
+
+  // Controladores
   final TextEditingController _offerController = TextEditingController();
   final TextEditingController _ownerController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _itemController = TextEditingController();
   final FocusNode _contactFocusNode = FocusNode();
+
+  // Configuración del AppBar
   List<Map<String, dynamic>> _appBarSlots = List.generate(8, (index) => {'isEmpty': true, 'element': null});
 
-  // Nueva variable para rastrear chequeos de días pendientes
-  Timer? _pendingDaysCheckTimer;
-  bool _hasShownPendingAlert = false;
+  // Variables para la configuración de botones
+  bool _showIcons = true;
+  double _textSizeMultiplier = 0.8;
+  double _iconSpacing = 1.0;
+  Map<String, IconData> _buttonIcons = {};
 
-  // Método mejorado para verificar transacciones del día anterior
-  bool _hasPreviousDayTransactions() {
-    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
-    // Usar el método mejorado de ReporteCaja que verifica todos los días pendientes
-    return reporteCaja.hasPendingOldTransactions();
-  }
-
-  // Método para obtener el número de días pendientes
-  int _getPendingDays() {
-    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
-    return reporteCaja.getOldestPendingDays();
-  }
-
-  // Diálogo mejorado para alertar sobre días pendientes
-  Future<void> _showPreviousDayAlert() async {
-    // Si ya mostramos la alerta, no la mostramos de nuevo
-    if (_hasShownPendingAlert) return;
-
-    _hasShownPendingAlert = true;
-
-    int pendingDays = _getPendingDays();
-    String dayText = pendingDays == 1 ? 'día' : 'días';
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-              SizedBox(width: 10),
-              Text('Cierre de Caja Pendiente'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'No es posible generar ventas porque existen transacciones de hace $pendingDays $dayText sin cerrar.',
-                style: TextStyle(fontSize: 16),
-              ),
-              SizedBox(height: 15),
-              Container(
-                padding: EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Debe cerrar la caja para continuar usando el sistema.',
-                        style: TextStyle(color: Colors.blue.shade800),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text('Cancelar'),
-            ),
-            ElevatedButton.icon(
-              icon: Icon(Icons.print),
-              label: Text('Ir a Reportes'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amber[800],
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-                );
-              },
-            ),
-          ],
-        );
-      },
-    ).then((_) {
-      // Después de cerrar el diálogo, reseteamos la bandera después de un tiempo
-      // para no molestar constantemente al usuario
-      Future.delayed(Duration(minutes: 5), () {
-        if (mounted) {
-          setState(() {
-            _hasShownPendingAlert = false;
-          });
-        }
-      });
-    });
-  }
-
-  // Verificar periódicamente si hay transacciones pendientes
-  void _startPendingTransactionsCheck() {
-    // Cancelar timer existente si hay uno
-    _pendingDaysCheckTimer?.cancel();
-
-    // Crear un nuevo timer que verifica cada 5 minutos
-    _pendingDaysCheckTimer = Timer.periodic(Duration(minutes: 5), (timer) {
-      if (_hasPreviousDayTransactions() && !_hasShownPendingAlert) {
-        _showPreviousDayAlert();
-      }
-    });
-  }
+  // Variables para la función de reimpresión
+  Map<String, dynamic>? _lastTransaction;
+  bool _isReprinting = false;
 
   @override
   void initState() {
     super.initState();
+
+    // Inicializar servicios
+    _pendingTransactionService = PendingTransactionService();
+    _resourcePreloader = ResourcePreloader(
+      pdfOptimizer: pdfOptimizer,
+      generateTicket: generateTicket,
+    );
+
     _initializeLocalization();
     _updateDay();
     _timer = Timer.periodic(Duration(milliseconds: 250), (timer) {
@@ -177,23 +92,39 @@ class _HomeState extends State<Home> {
 
     // Iniciar precarga de recursos inmediatamente y en segundo plano
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Usar un try-catch para evitar que errores de precarga afecten la experiencia del usuario
       try {
-        await _preloadPdfResourcesAsync();
+        final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
+        final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
+
+        await _resourcePreloader.preloadPdfResourcesAsync(context, comprobanteModel, reporteCaja);
 
         // Verificar transacciones pendientes después de cargar recursos
-        if (_hasPreviousDayTransactions()) {
-          _showPreviousDayAlert();
+        if (_pendingTransactionService.hasPreviousDayTransactions(reporteCaja)) {
+          await _pendingTransactionService.showPreviousDayAlert(
+            context,
+            reporteCaja,
+            _navigateToReports,
+          );
         }
 
         // Iniciar verificación periódica de transacciones pendientes
-        _startPendingTransactionsCheck();
+        _pendingTransactionService.startPendingTransactionsCheck(
+          reporteCaja,
+          () async {
+            if (mounted) {
+              await _pendingTransactionService.showPreviousDayAlert(
+                context,
+                reporteCaja,
+                _navigateToReports,
+              );
+            }
+          },
+        );
 
         // Ejecutar limpieza de reportes antiguos al iniciar
-        await _performMaintenanceTasks();
+        await MaintenanceService.performMaintenanceTasks();
       } catch (e) {
         print('Error en precarga de recursos: $e');
-        // No mostramos el error al usuario para no afectar la experiencia
       }
     });
 
@@ -201,91 +132,6 @@ class _HomeState extends State<Home> {
     _loadDisplayPreferences();
     _loadIconSettings();
     _loadAppBarConfig();
-  }
-
-  // Nueva función para tareas de mantenimiento programadas
-  Future<void> _performMaintenanceTasks() async {
-    try {
-      // Verificar cuándo fue la última limpieza
-      final prefs = await SharedPreferences.getInstance();
-      final lastCleanup = prefs.getInt('lastReportCleanup') ?? 0;
-      final now = DateTime.now().millisecondsSinceEpoch;
-
-      // Si han pasado más de 7 días desde la última limpieza
-      if (now - lastCleanup > Duration(days: 7).inMilliseconds) {
-        print('Ejecutando limpieza programada de reportes antiguos...');
-
-        // Crear instancia correctamente
-        final generator = PdfReportGenerator();
-        await generator.cleanOldReports(30); // Mantener reportes hasta 30 días
-
-        // Guardar timestamp de la última limpieza
-        await prefs.setInt('lastReportCleanup', now);
-        print('Limpieza completada. Próxima limpieza en 7 días.');
-      }
-    } catch (e) {
-      print('Error al realizar tareas de mantenimiento: $e');
-    }
-  }
-
-// Nueva función para precargar recursos de manera asíncrona
-  Future<void> _preloadPdfResourcesAsync() async {
-    if (_resourcesPreloaded) return; // Evitar cargar múltiples veces
-
-    print('Iniciando precarga de recursos en segundo plano...');
-
-    // Crear completers para cada recurso a cargar
-    final completer = Completer<void>();
-
-    // Ejecutar en un microtask para evitar bloquear la UI
-    Future.microtask(() async {
-      try {
-        // Precargar los recursos del PDF
-        await pdfOptimizer.preloadResources();
-        await generateTicket.preloadResources();
-
-        // Precargar recursos para tickets de cargo si están disponibles
-        try {
-          final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
-          final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
-          final cargoGen = CargoTicketGenerator(comprobanteModel, reporteCaja);
-          await cargoGen.preloadResources();
-        } catch (e) {
-          // Si hay un error al precargar recursos de cargo, no afecta la funcionalidad principal
-          print('Advertencia: No se pudieron precargar recursos de cargo: $e');
-        }
-
-        // Marcar como completado
-        setState(() {
-          _resourcesPreloaded = true;
-        });
-
-        completer.complete();
-        print('Precarga de recursos completada con éxito');
-      } catch (e) {
-        completer.completeError(e);
-        print('Error durante la precarga de recursos: $e');
-      }
-    });
-
-    return completer.future;
-  }
-
-// Modificar el método existente para verificar primero si ya está cargado
-  Future<void> _preloadPdfResources() async {
-    if (_resourcesPreloaded) {
-      print('Recursos ya precargados, no es necesario cargar nuevamente');
-      return;
-    }
-
-    // Si no está precargado, intentar cargar normalmente
-    try {
-      await _preloadPdfResourcesAsync();
-    } catch (e) {
-      print('Error al cargar recursos: $e');
-      // Intentaremos nuevamente cuando sea necesario
-      _resourcesPreloaded = false;
-    }
   }
 
   @override
@@ -299,7 +145,7 @@ class _HomeState extends State<Home> {
   @override
   void dispose() {
     _timer.cancel();
-    _pendingDaysCheckTimer?.cancel();
+    _pendingTransactionService.dispose();
     _offerController.dispose();
     _ownerController.dispose();
     _phoneController.dispose();
@@ -308,399 +154,30 @@ class _HomeState extends State<Home> {
     super.dispose();
   }
 
+  // ==================== MÉTODOS DE CARGA DE CONFIGURACIÓN ====================
+
   Future<void> _loadAppBarConfig() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // Try to load the slot-based configuration first
-      final String? savedSlotsConfig = prefs.getString('appBarSlots');
-
-      if (savedSlotsConfig != null) {
-        List<dynamic> loadedSlots = json.decode(savedSlotsConfig);
-        setState(() {
-          _appBarSlots = List<Map<String, dynamic>>.from(loadedSlots);
-        });
-        print('Loaded AppBar config from slots format');
-      } else {
-        // Fall back to old configuration format
-        final String? savedConfig = prefs.getString('appBarConfig');
-
-        if (savedConfig != null) {
-          Map<String, dynamic> loadedConfig = json.decode(savedConfig);
-
-          // Convert old format to slot format
-          // Explicitly define Map with dynamic values to avoid type inference issues
-          var slots = List<Map<String, dynamic>>.generate(
-              8,
-                  (index) => <String, dynamic>{'isEmpty': true, 'element': null}
-          );
-
-          // Sort elements by position
-          var sortedElements = loadedConfig.entries.toList()
-            ..sort((a, b) => (a.value['position'] as int).compareTo(b.value['position'] as int));
-
-          // Fill slots based on position
-          for (var entry in sortedElements) {
-            if (entry.value['enabled'] == true) {
-              int position = entry.value['position'] as int;
-
-              // Skip invalid positions
-              if (position >= 0 && position < 8) {
-                // Date should always be in slot 7
-                if (entry.key == 'date') {
-                  slots[7] = <String, dynamic>{'isEmpty': false, 'element': entry.key};
-                } else if (slots[position]['isEmpty'] == true) {
-                  slots[position] = <String, dynamic>{'isEmpty': false, 'element': entry.key};
-                }
-              }
-            }
-          }
-
-          setState(() {
-            _appBarSlots = slots;
-          });
-          print('Converted old AppBar config to slots format');
-        } else {
-          _setupDefaultAppBarConfig();
-        }
-      }
-    } catch (e) {
-      print('Error loading AppBar configuration: $e');
-      _setupDefaultAppBarConfig();
-    }
-  }
-
-
-  Future<void> _loadIconSettings() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      setState(() {
-        _iconSpacing = prefs.getDouble('iconSpacing') ?? 1.0;
-      });
-
-      final Map<String, dynamic>? savedIcons =
-      prefs.getString('buttonIcons') != null
-          ? json.decode(prefs.getString('buttonIcons')!)
-          : null;
-
-      if (savedIcons != null) {
-        setState(() {
-          _buttonIcons.clear();
-          savedIcons.forEach((key, value) {
-            _buttonIcons[key] = _getIconFromString(value.toString());
-          });
-        });
-      }
-
-      print('Icon settings loaded: spacing=$_iconSpacing, icons=${_buttonIcons.length}');
-    } catch (e) {
-      print('Error loading icon settings: $e');
-    }
-  }
-
-  void _setupDefaultAppBarConfig() {
+    final loadedConfig = await HomeHelpers.loadAppBarConfig();
     setState(() {
-      _appBarSlots = List.generate(8, (index) => {'isEmpty': true, 'element': null});
-
-      _appBarSlots[0] = {'isEmpty': false, 'element': 'report'};
-      _appBarSlots[1] = {'isEmpty': false, 'element': 'mail'};  // Mail button in position 1 (2nd position)
-      _appBarSlots[4] = {'isEmpty': false, 'element': 'delete'};
-      _appBarSlots[5] = {'isEmpty': false, 'element': 'reprint'};
-      _appBarSlots[6] = {'isEmpty': false, 'element': 'settings'};
-      _appBarSlots[7] = {'isEmpty': false, 'element': 'date'};
+      _appBarSlots = loadedConfig;
     });
   }
 
-
-  Widget _buildAppBarSlotWidget(int index) {
-    if (index >= _appBarSlots.length || _appBarSlots[index]['isEmpty'] == true) {
-      return Container();
-    }
-
-    String? elementKey = _appBarSlots[index]['element'] as String?;
-    if (elementKey == null) {
-      return Container();
-    }
-
-    // Additional margin parameter
-    double leftMargin = _appBarSlots[index]['leftMargin'] ?? 0.0;
-
-    // Report button (usually in slot 0)
-    if (elementKey == 'report') {
-      return Container(
-        width: 25,
-        height: 25,
-        margin: EdgeInsets.only(left: 20 + leftMargin), // Add leftMargin to existing margin
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Color(0xFF1900A2),
-        ),
-        child: IconButton(
-          icon: Icon(
-            Icons.print,
-            color: Colors.white,
-            size: 24,
-          ),
-          padding: EdgeInsets.zero,
-          tooltip: 'Reportes',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-            );
-          },
-        ),
-      );
-    }
-    // Delete button
-    else if (elementKey == 'delete') {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3.0),
-        child: Consumer<ReporteCaja>(
-          builder: (context, reporteCaja, child) {
-            bool canAnular = reporteCaja.hasActiveTransactions() && !_hasAnulado;
-            return Container(
-              width: 35,
-              height: 35,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: canAnular ? Color(0xFFFF0C00) : Colors.white,
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(21),
-                  onTap: canAnular ? () async {
-                    await _showPasswordDialog();
-                  } : null,
-                  child: Center(
-                    child: Icon(
-                      Icons.delete,
-                      color: Colors.black,
-                      size: 24,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      );
-    }
-
-    // Reprint button
-// Reprint button
-    else if (elementKey == 'reprint') {
-      // ¿La última transacción es de cargo?
-      bool isCargo = _lastTransaction != null
-          && _lastTransaction!['nombre']
-              .toString()
-              .toLowerCase()
-              .contains('cargo');
-      // ¿Podemos reimprimir? — Siempre para cargo, o solo una vez para otros
-      bool canReprint = _lastTransaction != null
-          && !_isReprinting
-          && (isCargo || !_hasReprinted);
-
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3.0),
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: canReprint ? Color(0xFFFFD71F) : Colors.white,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(21),
-              onTap: canReprint ? _handleReprint : null,
-              child: Center(
-                child: Image.asset(
-                  'assets/reprint.png',
-                  width: 20,
-                  height: 20,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Settings button
-    else if (elementKey == 'settings') {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3.0),
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Color(0xFF00910B),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(21),
-              onTap: _navigateToSettings,
-              child: Center(
-                child: Icon(
-                  Icons.settings,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Date display
-    else if (elementKey == 'date') {
-      return Padding(
-        padding: const EdgeInsets.only(right: 5.0, left: 3.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                getCurrentDate(),
-                style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold
-                ),
-              ),
-              Text(
-                _currentDay,
-                style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Mail button (for cargo) with status indicator for pending days
-    else if (elementKey == 'mail') {
-      return Consumer<ReporteCaja>(
-        builder: (context, reporteCaja, child) {
-          bool hasPendingDays = reporteCaja.hasPendingOldTransactions();
-
-          return Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3.0),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.purple,
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(21),
-                      onTap: () {
-                        _showOfferDialog();
-                      },
-                      child: Center(
-                        child: Icon(
-                          Icons.mail,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // Indicator for pending days
-              if (hasPendingDays)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '!',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      );
-    }
-
-    // Default empty widget for unknown elements
-    return Container();
-  }
-
-  IconData _getIconFromString(String iconName) {
-    switch (iconName) {
-      case 'people': return Icons.people;
-      case 'school': return Icons.school;
-      case 'school_outlined': return Icons.school_outlined;
-      case 'elderly': return Icons.elderly;
-      case 'directions_bus': return Icons.directions_bus;
-      case 'map': return Icons.map;
-      case 'local_offer': return Icons.local_offer;
-      case 'inventory': return Icons.inventory;
-      case 'confirmation_number': return Icons.confirmation_number;
-      case 'receipt': return Icons.receipt;
-      case 'attach_money': return Icons.attach_money;
-      case 'mail': return Icons.mail;
-      default: return Icons.error;
-    }
-  }
-
-  IconData _getButtonIcon(String buttonName, IconData defaultIcon) {
-    return _buttonIcons[buttonName] ?? defaultIcon;
+  Future<void> _loadIconSettings() async {
+    final loadedIcons = await HomeHelpers.loadIconSettings();
+    setState(() {
+      _iconSpacing = 1.0; // Default value
+      _buttonIcons = loadedIcons;
+    });
   }
 
   Future<void> _loadDisplayPreferences() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final showIcons = prefs.getBool('showIcons');
-      final textSizeMultiplier = prefs.getDouble('textSizeMultiplier');
-
-      print('Loading display preferences: showIcons=$showIcons, textSizeMultiplier=$textSizeMultiplier');
-
-      setState(() {
-        if (showIcons != null) _showIcons = showIcons;
-        if (textSizeMultiplier != null) _textSizeMultiplier = textSizeMultiplier;
-      });
-
-      print('Updated state: _showIcons=$_showIcons, _textSizeMultiplier=$_textSizeMultiplier');
-    } catch (e) {
-      print('Error loading display preferences: $e');
-    }
+    final prefs = await HomeHelpers.loadDisplayPreferences();
+    setState(() {
+      _showIcons = prefs['showIcons'];
+      _textSizeMultiplier = prefs['textSizeMultiplier'];
+      _iconSpacing = prefs['iconSpacing'];
+    });
   }
 
   Future<void> _initializeLocalization() async {
@@ -708,65 +185,64 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _loadLastTransaction() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      String? lastTransactionJson = prefs.getString('lastTransaction');
-
-      if (lastTransactionJson != null && lastTransactionJson.isNotEmpty) {
-        setState(() {
-          _lastTransaction = jsonDecode(lastTransactionJson);
-          _hasReprinted = false;
-        });
-      }
-    } catch (e) {
-      print('Error al cargar la última transacción: $e');
+    final transaction = await HomeHelpers.loadLastTransaction();
+    if (transaction != null) {
+      setState(() {
+        _lastTransaction = transaction;
+        _hasReprinted = false;
+      });
     }
   }
 
   Future<void> _saveLastTransaction(Map<String, dynamic> transaction) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('lastTransaction', jsonEncode(transaction));
-
-      setState(() {
-        _lastTransaction = transaction;
-        _hasReprinted = false;
-        _hasAnulado = false;
-      });
-    } catch (e) {
-      print('Error al guardar la última transacción: $e');
-    }
+    await HomeHelpers.saveLastTransaction(transaction);
+    setState(() {
+      _lastTransaction = transaction;
+      _hasReprinted = false;
+      _hasAnulado = false;
+    });
   }
 
   void _updateDay() {
     setState(() {
-      _currentDay = DateFormat('EEEE', 'es_ES').format(DateTime.now()).toUpperCase();
+      _currentDay = HomeHelpers.getCurrentDay();
     });
   }
 
-  String getCurrentDate() {
-    return DateFormat('dd/MM/yyyy').format(DateTime.now());
+  // ==================== MÉTODOS DE NAVEGACIÓN ====================
+
+  void _navigateToReports() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
+    );
   }
 
-  String _formatContactInfo(String value, bool isPhone) {
-    if (isPhone) {
-      if (value.length < 8) return value;
-      return '${value.substring(0, 1)} ${value.substring(1, 5)} ${value.substring(5)}';
-    } else {
-      return value;
+  void _navigateToSettings() async {
+    final settingsChanged = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => Settings()),
+    );
+
+    if (settingsChanged == true) {
+      print('Settings changed, reloading preferences');
+      await _loadDisplayPreferences();
+      setState(() {});
     }
   }
 
-  Future<String> _loadPassword() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('password') ?? '232323';
-  }
+  // ==================== MÉTODOS DE GENERACIÓN DE TICKETS ====================
 
-  // Método mejorado para generar tickets con verificación de cierre de caja pendiente
   Future<void> _generateTicket(String tipo, double valor, bool isCorrespondencia) async {
+    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
+
     // Verificar transacciones pendientes del día anterior
-    if (_hasPreviousDayTransactions()) {
-      await _showPreviousDayAlert();
+    if (_pendingTransactionService.hasPreviousDayTransactions(reporteCaja)) {
+      await _pendingTransactionService.showPreviousDayAlert(
+        context,
+        reporteCaja,
+        _navigateToReports,
+      );
       return;
     }
 
@@ -779,7 +255,6 @@ class _HomeState extends State<Home> {
       _isLoading = true;
     });
 
-    // Show a SnackBar with shorter duration
     final snackBar = SnackBar(
       content: Row(
         children: [
@@ -801,53 +276,46 @@ class _HomeState extends State<Home> {
 
     try {
       final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
-      final reporteCaja = Provider.of<ReporteCaja>(context, listen: false); // Agregar esta línea
 
       await generateTicket.generateTicketPdf(
-          context,
-          valor,
-          _switchValue,
-          tipo,
-          comprobanteModel,
-          false
+        context,
+        valor,
+        _switchValue,
+        tipo,
+        comprobanteModel,
+        false,
       );
 
-      // Obtener el número de comprobante actual
       String currentComprobante = comprobanteModel.formattedComprobante;
+      reporteCaja.receiveData(tipo, valor, currentComprobante);
 
-      // Guardar la transacción en ReporteCaja
-      reporteCaja.receiveData(tipo, valor, currentComprobante); // Agregar esta línea
-
-      // Update the latest transaction
       setState(() {
         _lastTransaction = {
           'nombre': tipo,
           'valor': valor,
           'switchValue': _switchValue,
-          'comprobante': currentComprobante, // Usar el comprobante actual
+          'comprobante': currentComprobante,
         };
       });
 
-      // Guardar la transacción para posible reimpresión
       await _saveLastTransaction(_lastTransaction!);
 
-      // Show success confirmation
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ticket generado correctamente'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 1),
-          )
+        SnackBar(
+          content: Text('Ticket generado correctamente'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 1),
+        ),
       );
     } catch (e) {
       print('Error generando ticket: $e');
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al generar ticket'),
-            backgroundColor: Colors.red,
-          )
+        SnackBar(
+          content: Text('Error al generar ticket'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() {
@@ -857,522 +325,57 @@ class _HomeState extends State<Home> {
     }
   }
 
-  // Método para verificar si el total es igual a 0
-  bool _isTotalZero(List<Map<String, dynamic>> offerEntries) {
-    double total = offerEntries.fold(0.0, (sum, entry) {
-      double number = double.tryParse(entry['number'] ?? '0') ?? 0.0;
-      double value = double.tryParse(entry['value'] ?? '0') ?? 0.0;
-      return sum + (number * value);
-    });
-    return total == 0;
-  }
+  // ==================== MÉTODOS DE REIMPRESIÓN ====================
 
-  // Métodos de reimpresión
   void _handleReprint() async {
-    // 1) Si no es cargo y ya reimpreso, bloqueo
-    if (_hasReprinted
-        && _lastTransaction != null
-        && !_lastTransaction!['nombre']
-            .toString()
-            .toLowerCase()
-            .contains('cargo')) {
+    // Si no es cargo y ya reimpreso, bloqueo
+    if (_hasReprinted &&
+        _lastTransaction != null &&
+        !_lastTransaction!['nombre'].toString().toLowerCase().contains('cargo')) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(
-              'Ya se ha reimpreso este boleto. Genere uno nuevo para reimprimir.'
-          ))
+        SnackBar(content: Text('Ya se ha reimpreso este boleto. Genere uno nuevo para reimprimir.')),
       );
       return;
     }
 
-    // 2) Sin última transacción
+    // Sin última transacción
     if (_lastTransaction == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No hay transacción para reimprimir'))
+        SnackBar(content: Text('No hay transacción para reimprimir')),
       );
       return;
     }
 
-    // 3) Pedir contraseña
-    bool ok = await _showReprintPasswordDialog();
+    // Pedir contraseña
+    bool ok = await showReprintPasswordDialog(context, HomeHelpers.loadPassword);
     if (!ok) return;
 
-    // 4) Cargo → muestro siempre opciones Cliente/Carga/Ambas
+    // Cargo → muestro siempre opciones Cliente/Carga/Ambas
     final nombre = _lastTransaction!['nombre'].toString().toLowerCase();
     if (nombre.contains('cargo')) {
-      await _showLastCargoReprintOptions();
+      await showLastCargoReprintOptions(
+        context,
+        _lastTransaction,
+        _reprintCargoTicket,
+      );
     } else {
       // Resto → flujo actual (una única reimpresión)
-      await _showReprintOptionsDialog();
-      // marcar como reimpreso
-      setState(() { _hasReprinted = true; });
+      await showReprintOptionsDialog(
+        context,
+        _lastTransaction,
+        _hasReprinted,
+        _handleLastTransactionReprint,
+      );
+      setState(() {
+        _hasReprinted = true;
+      });
     }
-  }
-
-
-
-  Future<bool> _showReprintPasswordDialog() async {
-    final TextEditingController passwordController = TextEditingController();
-    bool isAuthenticated = false;
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
-          ),
-          elevation: 24,
-          title: Row(
-            children: [
-              Icon(Icons.print, color: Colors.yellow.shade600, size: 32),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                    'Reimpresión de Boleta',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.yellow.shade800,
-                      fontSize: 20,
-                    )
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Animación de advertencia
-              AnimatedContainer(
-                duration: Duration(milliseconds: 500),
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3), width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blue.withOpacity(0.2),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    )
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.yellow.shade800, size: 28),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Autenticación requerida para reimprimir boletas.',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 20),
-
-              Text(
-                  'Ingrese la contraseña para continuar:',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16
-                  )
-              ),
-              SizedBox(height: 10),
-              TextField(
-                controller: passwordController,
-                decoration: InputDecoration(
-                  labelText: 'Contraseña',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.yellow.shade300, width: 2),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.yellow.shade300, width: 2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.yellow.shade500, width: 2),
-                  ),
-                  helperText: 'Máximo 6 dígitos',
-                  prefixIcon: Icon(Icons.password, color: Colors.yellow.shade500),
-                  filled: true,
-                  fillColor: Colors.blue.shade50,
-                ),
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                style: TextStyle(fontSize: 18, letterSpacing: 8),
-              ),
-            ],
-          ),
-          actions: [
-            Container(
-              margin: EdgeInsets.only(bottom: 10, right: 10),
-              child: TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  'Cancelar',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              margin: EdgeInsets.only(bottom: 10, right: 10),
-              child: ElevatedButton.icon(
-                icon: Icon(Icons.check_circle_outline, color: Colors.white),
-                label: Text(
-                  'Continuar',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.yellow.shade600,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () async {
-                  String inputPassword = passwordController.text;
-                  String storedPassword = await _loadPassword();
-
-                  if (inputPassword == storedPassword) {
-                    isAuthenticated = true;
-                    Navigator.of(context).pop();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              Icon(Icons.error_outline, color: Colors.white),
-                              SizedBox(width: 10),
-                              Text('Contraseña incorrecta'),
-                            ],
-                          ),
-                          backgroundColor: Colors.red.shade700,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        )
-                    );
-                  }
-                },
-              ),
-            ),
-          ],
-          actionsPadding: EdgeInsets.only(right: 10),
-          contentPadding: EdgeInsets.fromLTRB(24, 20, 24, 24),
-          titlePadding: EdgeInsets.fromLTRB(24, 24, 24, 10),
-          backgroundColor: Colors.white,
-        );
-      },
-    );
-
-    return isAuthenticated;
-  }
-
-// 1. Diálogo para mostrar opciones de reimpresión (rediseñado)
-  Future<void> _showReprintOptionsDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.print, color: Colors.yellow.shade600, size: 32),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Opciones de Reimpresión',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.amber.shade800,
-                    fontSize: 20,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_lastTransaction != null && !_hasReprinted)
-                  ListTile(
-                    leading: Icon(Icons.receipt_long, color: Colors.blue, size: 28),
-                    title: Text(
-                      'Reimprimir última transacción',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(_lastTransaction!['nombre'] ?? 'Transacción'),
-                    trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      _handleLastTransactionReprint();
-                    },
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Cancelar',
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-
-
-// 2. Diálogo para mostrar opciones de cargo para reimprimir (rediseñado)
-  Future<void> _showLastCargoReprintOptions() async {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(
-                Icons.inventory,
-                color: Colors.orange,
-                size: 28,
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text('Reimprimir Último Cargo', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Información del cargo
-                Container(
-                  padding: EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.5)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Detalles del Cargo:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 8),
-                      Text('Destinatario: ${_lastTransaction!['destinatario'] ?? 'No disponible'}'),
-                      Text('Comprobante: ${_lastTransaction!['comprobante'] ?? 'No disponible'}'),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 15),
-                Text(
-                  '¿Qué boleta desea reimprimir?',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 20),
-              ],
-            ),
-          ),
-          actions: [
-            // Fila de botones en dos columnas
-            Container(
-              width: double.infinity,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Primera fila: Cliente y Carga
-                  Row(
-                    children: [
-                      // Botón Cliente (Azul)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 4.0, bottom: 4.0),
-                          child: ElevatedButton.icon(
-                            icon: Icon(Icons.person, color: Colors.white),
-                            label: Text(
-                              'Cliente',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              _reprintCargoTicket(true, false);
-                            },
-                          ),
-                        ),
-                      ),
-
-                      // Botón Carga (Verde)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
-                          child: ElevatedButton.icon(
-                            icon: Icon(Icons.local_shipping, color: Colors.white),
-                            label: Text(
-                              'Carga',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              _reprintCargoTicket(false, true);
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  // Segunda fila: Ambas y Cancelar
-                  Row(
-                    children: [
-                      // Botón Ambas (Naranja)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 4.0, top: 4.0),
-                          child: ElevatedButton.icon(
-                            icon: Icon(Icons.print, color: Colors.white),
-                            label: Text(
-                              'Ambas',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              _reprintCargoTicket(true, true);
-                            },
-                          ),
-                        ),
-                      ),
-
-                      // Botón Cancelar (Gris)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 4.0, top: 4.0),
-                          child: ElevatedButton.icon(
-                            icon: Icon(Icons.cancel, color: Colors.white),
-                            label: Text(
-                              'Cancelar',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey,
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-// Método auxiliar para construir filas de detalles de cargo
-  Widget _buildCargoDetailRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 35,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade700,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 65,
-          child: Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   void _handleLastTransactionReprint() async {
     if (_lastTransaction == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No hay transacción para reimprimir'))
+        SnackBar(content: Text('No hay transacción para reimprimir')),
       );
       return;
     }
@@ -1382,21 +385,20 @@ class _HomeState extends State<Home> {
     });
 
     try {
-      // Check transaction type by name
       String nombre = _lastTransaction!['nombre'] ?? '';
 
       if (nombre.toLowerCase().contains('cargo')) {
-        // For cargo type, show reprint options
-        await _showLastCargoReprintOptions();
+        await showLastCargoReprintOptions(
+          context,
+          _lastTransaction,
+          _reprintCargoTicket,
+        );
       } else if (nombre == 'Oferta Ruta' || _lastTransaction!['tipo'] == 'ofertaMultiple') {
-        // For offer type
         await _reprintOfferTicket();
       } else {
-        // For regular tickets
         await _reprintRegularTicket();
       }
 
-      // Only mark as reprinted if not a cargo transaction
       if (!nombre.toLowerCase().contains('cargo')) {
         setState(() {
           _hasReprinted = true;
@@ -1405,7 +407,7 @@ class _HomeState extends State<Home> {
     } catch (e) {
       print('Error al reimprimir: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al reimprimir: $e'))
+        SnackBar(content: Text('Error al reimprimir: $e')),
       );
     } finally {
       setState(() {
@@ -1416,10 +418,9 @@ class _HomeState extends State<Home> {
 
   Future<void> _reprintOfferTicket() async {
     try {
-      // Verificar que existe la información necesaria
       if (_lastTransaction == null || _lastTransaction!['offerEntries'] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No hay suficientes detalles para reimprimir'))
+          SnackBar(content: Text('No hay suficientes detalles para reimprimir')),
         );
         return;
       }
@@ -1428,10 +429,7 @@ class _HomeState extends State<Home> {
       String comprobante = _lastTransaction!['comprobante'] ?? '';
       bool switchValue = _lastTransaction!['switchValue'] ?? false;
 
-      // Convertir la información guardada en formato utilizable por el generador
       List savedEntries = _lastTransaction!['offerEntries'] as List;
-
-      // Crear lista de entradas con los datos necesarios y los controladores
       List<Map<String, dynamic>> offerEntries = [];
       for (var entry in savedEntries) {
         offerEntries.add({
@@ -1442,33 +440,29 @@ class _HomeState extends State<Home> {
         });
       }
 
-      // Mostrar indicador de progreso
       setState(() {
         _isReprinting = true;
       });
 
-      // Llamar al método de reimpresión
       await moTicketGenerator.reprintMoTicket(
-          PdfPageFormat.standard,
-          offerEntries,
-          switchValue,
-          context,
-          comprobante
+        PdfPageFormat.standard,
+        offerEntries,
+        switchValue,
+        context,
+        comprobante,
       );
 
-      // Después de reimprimir exitosamente
       setState(() {
-        _hasReprinted = true; // Marcar como reimpreso
+        _hasReprinted = true;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Reimpresión completada correctamente'))
+        SnackBar(content: Text('Reimpresión completada correctamente')),
       );
-
     } catch (e) {
       print('Error en _reprintOfferTicket: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al reimprimir: $e'))
+        SnackBar(content: Text('Error al reimprimir: $e')),
       );
     } finally {
       setState(() {
@@ -1476,11 +470,10 @@ class _HomeState extends State<Home> {
       });
     }
   }
-  // Reimprimir un boleto normal
+
   Future<void> _reprintRegularTicket() async {
     final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
 
-    // No incrementar el número de comprobante para reimpresión
     String tipo = _lastTransaction!['nombre'] ?? '';
     double valor = _lastTransaction!['valor'] ?? 0.0;
     bool switchValue = _lastTransaction!['switchValue'] ?? false;
@@ -1491,7 +484,7 @@ class _HomeState extends State<Home> {
       switchValue,
       tipo,
       comprobanteModel,
-      true, // Indicar que es una reimpresión
+      true,
     );
 
     setState(() {
@@ -1501,21 +494,17 @@ class _HomeState extends State<Home> {
 
   Future<void> _reprintCargoTicket(bool printClient, bool printCargo) async {
     final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
-    final reporteCaja      = Provider.of<ReporteCaja>(context, listen: false);
-    final cargoGen         = CargoTicketGenerator(comprobanteModel, reporteCaja);
+    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
+    final cargoGen = CargoTicketGenerator(comprobanteModel, reporteCaja);
 
     try {
-      // Extraemos los campos de _lastTransaction
       final String destinatario = _lastTransaction!['destinatario'] as String? ?? '';
-      final String articulo     = _lastTransaction!['articulo']    as String? ?? '';
-      final double valor        = _lastTransaction!['precio']      as double? ?? 0.0;
-      final String destino      = _lastTransaction!['destino']     as String? ?? '';
-      final String telefono     = _lastTransaction!['telefono']    as String? ?? '';
-
-      // Obtenemos el comprobante actual (no incrementa en reimpresión)
+      final String articulo = _lastTransaction!['articulo'] as String? ?? '';
+      final double valor = _lastTransaction!['precio'] as double? ?? 0.0;
+      final String destino = _lastTransaction!['destino'] as String? ?? '';
+      final String telefono = _lastTransaction!['telefono'] as String? ?? '';
       final String ticketNum = comprobanteModel.formattedComprobante;
 
-      // Llamada con los 8 parámetros correctos
       await cargoGen.reprintNewCargoPdf(
         destinatario,
         articulo,
@@ -1527,34 +516,45 @@ class _HomeState extends State<Home> {
         ticketNum,
       );
 
-      setState(() { _hasReprinted = true; });
+      setState(() {
+        _hasReprinted = true;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Reimpresión completada correctamente'))
+        SnackBar(content: Text('Reimpresión completada correctamente')),
       );
     } catch (e) {
       print('Error en _reprintCargoTicket: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al reimprimir: $e'))
+        SnackBar(content: Text('Error al reimprimir: $e')),
       );
-      setState(() { _hasReprinted = false; });
+      setState(() {
+        _hasReprinted = false;
+      });
     }
   }
 
-// Método para mostrar diálogo de oferta múltiple con botón para ir a reportes si hay pendientes
+  // ==================== DIÁLOGO DE OFERTA MÚLTIPLE ====================
+
   Future<void> _showMultiOfferDialog() async {
-    // 1) Verificar si hay transacciones del día anterior
-    if (_hasPreviousDayTransactions()) {
-      await _showPreviousDayAlert();
+    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
+
+    // Verificar si hay transacciones del día anterior
+    if (_pendingTransactionService.hasPreviousDayTransactions(reporteCaja)) {
+      await _pendingTransactionService.showPreviousDayAlert(
+        context,
+        reporteCaja,
+        _navigateToReports,
+      );
       return;
     }
 
     // Asegurar que los recursos estén precargados
-    if (!_resourcesPreloaded) {
-      await _preloadPdfResources();
+    if (!_resourcePreloader.resourcesPreloaded) {
+      final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
+      await _resourcePreloader.preloadPdfResources(context, comprobanteModel, reporteCaja);
     }
 
-    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
-    // Formateador solo para miles, sin decimales
     final decimalFormatter = NumberFormat.decimalPattern('es_CL');
 
     List<Map<String, dynamic>> offerEntries = [
@@ -1566,10 +566,8 @@ class _HomeState extends State<Home> {
       }
     ];
 
-    // Variable para guardar el valor total actual
     double currentTotal = 0.0;
 
-    // Función para calcular el total actual basado en entradas
     double calculateTotal(List<Map<String, dynamic>> entries) {
       return entries.fold(0.0, (sum, e) {
         final qty = double.tryParse(e['numberController'].text) ?? 0;
@@ -1588,10 +586,8 @@ class _HomeState extends State<Home> {
           builder: (BuildContext dialogContext, StateSetter dialogSetState) {
             bool isLoading = false;
 
-            // Configura los listeners de texto para actualizar el total en tiempo real
             void setupControllerListeners() {
               for (var entry in offerEntries) {
-                // Add null checks before calling methods
                 final numberController = entry['numberController'] as TextEditingController?;
                 final valueController = entry['valueController'] as TextEditingController?;
 
@@ -1615,7 +611,6 @@ class _HomeState extends State<Home> {
               }
             }
 
-            // Configurar listeners para la primera entrada al inicio
             if (currentTotal == 0.0) {
               setupControllerListeners();
             }
@@ -1630,12 +625,11 @@ class _HomeState extends State<Home> {
               });
 
               try {
-                // Mostrar feedback al usuario
                 ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Generando oferta...'),
-                      duration: Duration(milliseconds: 800),
-                    )
+                  SnackBar(
+                    content: Text('Generando oferta...'),
+                    duration: Duration(milliseconds: 800),
+                  ),
                 );
 
                 final entriesForTicket = offerEntries.map((e) => {
@@ -1648,7 +642,7 @@ class _HomeState extends State<Home> {
                   entriesForTicket,
                   _switchValue,
                   context,
-                      (String nombre, double valor, List<double> subtots, String comprobante) {
+                  (String nombre, double valor, List<double> subtots, String comprobante) {
                     reporteCaja.addOfferEntries(subtots, valor, comprobante);
                     if (!mounted) return;
                     setState(() {
@@ -1664,28 +658,25 @@ class _HomeState extends State<Home> {
                       _hasAnulado = false;
                     });
 
-                    // Guardar transacción para reimpresión
                     _saveLastTransaction(_lastTransaction!);
                   },
                 );
 
-                // Mostrar mensaje de éxito
                 ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Oferta generada correctamente'),
-                      backgroundColor: Colors.green,
-                    )
+                  SnackBar(
+                    content: Text('Oferta generada correctamente'),
+                    backgroundColor: Colors.green,
+                  ),
                 );
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                        content: Text('Error al imprimir: $e'),
-                        backgroundColor: Colors.red
+                      content: Text('Error al imprimir: $e'),
+                      backgroundColor: Colors.red,
                     ),
                   );
-                  // Liberar recursos en caso de error
-                  _clearCacheIfNeeded();
+                  _resourcePreloader.clearCacheIfNeeded();
                 }
               } finally {
                 if (!mounted) return;
@@ -1696,7 +687,6 @@ class _HomeState extends State<Home> {
               }
             }
 
-            // UI del diálogo con actualización en tiempo real
             return Scaffold(
               backgroundColor: Colors.white,
               appBar: AppBar(
@@ -1713,7 +703,6 @@ class _HomeState extends State<Home> {
                 padding: EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    // Banner de cajas pendientes (si hay días pendientes)
                     if (reporteCaja.hasPendingOldTransactions())
                       Container(
                         margin: EdgeInsets.only(bottom: 16),
@@ -1749,10 +738,7 @@ class _HomeState extends State<Home> {
                               child: Text('Ir a Reportes'),
                               onPressed: () {
                                 Navigator.of(dialogContext).pop();
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-                                );
+                                _navigateToReports();
                               },
                               style: TextButton.styleFrom(
                                 backgroundColor: Colors.orange.shade100,
@@ -1782,7 +768,6 @@ class _HomeState extends State<Home> {
                                   ),
                                   keyboardType: TextInputType.number,
                                   onChanged: (_) {
-                                    // Asegurar que la actualización ocurra inmediatamente
                                     dialogSetState(() {
                                       currentTotal = calculateTotal(offerEntries);
                                     });
@@ -1801,7 +786,6 @@ class _HomeState extends State<Home> {
                                   ),
                                   keyboardType: TextInputType.number,
                                   onChanged: (_) {
-                                    // Asegurar que la actualización ocurra inmediatamente
                                     dialogSetState(() {
                                       currentTotal = calculateTotal(offerEntries);
                                     });
@@ -1814,7 +798,6 @@ class _HomeState extends State<Home> {
                                   onPressed: () {
                                     dialogSetState(() {
                                       offerEntries.removeAt(i);
-                                      // Recalcular total después de eliminar una línea
                                       currentTotal = calculateTotal(offerEntries);
                                     });
                                   },
@@ -1836,21 +819,21 @@ class _HomeState extends State<Home> {
                       child: Row(
                         children: [
                           Text(
-                              'Total:',
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.amber.shade800
-                              )
+                            'Total:',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade800,
+                            ),
                           ),
                           Spacer(),
                           Text(
-                              '\$${decimalFormatter.format(currentTotal)}',
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.amber.shade800
-                              )
+                            '\$${decimalFormatter.format(currentTotal)}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade800,
+                            ),
                           ),
                         ],
                       ),
@@ -1863,7 +846,6 @@ class _HomeState extends State<Home> {
                           ElevatedButton.icon(
                             onPressed: () {
                               dialogSetState(() {
-                                // Agregar nueva línea
                                 final newEntry = {
                                   'numberController': TextEditingController(),
                                   'valueController': TextEditingController(),
@@ -1872,7 +854,6 @@ class _HomeState extends State<Home> {
                                 };
                                 offerEntries.add(newEntry);
 
-                                // Configurar listeners para la nueva entrada con verificación de nulidad
                                 final newNumberController = newEntry['numberController'] as TextEditingController?;
                                 final newValueController = newEntry['valueController'] as TextEditingController?;
 
@@ -1913,9 +894,9 @@ class _HomeState extends State<Home> {
                       )
                     else
                       Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.amber.shade800),
-                          )
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.amber.shade800),
+                        ),
                       ),
                   ],
                 ),
@@ -1927,12 +908,20 @@ class _HomeState extends State<Home> {
     );
   }
 
-  // Método mejorado para mostrar oferta de cargo con verificación de cierres pendientes
+  // ==================== DIÁLOGO DE CARGO ====================
+
   void _showOfferDialog() {
-    if (_hasPreviousDayTransactions()) {
-      _showPreviousDayAlert();
+    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
+
+    if (_pendingTransactionService.hasPreviousDayTransactions(reporteCaja)) {
+      _pendingTransactionService.showPreviousDayAlert(
+        context,
+        reporteCaja,
+        _navigateToReports,
+      );
       return;
     }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1945,224 +934,19 @@ class _HomeState extends State<Home> {
     );
   }
 
-  // Modificar el diálogo de contraseña para anular venta
+  // ==================== DIÁLOGO DE ANULAR VENTA ====================
+
   Future<void> _showPasswordDialog() async {
-    if (_hasAnulado) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ya se ha anulado una venta. Genere un nuevo boleto para poder anular de nuevo.'))
-      );
-      return;
-    }
-
-    final TextEditingController passwordController = TextEditingController();
-
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
-          ),
-          elevation: 24,
-          title: Row(
-            children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.orange,
-                size: 32,
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                    'Anular Última Venta',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.red.shade800,
-                      fontSize: 20,
-                    )
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Animación de advertencia
-              AnimatedContainer(
-                duration: Duration(milliseconds: 500),
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withOpacity(0.3), width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.2),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    )
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.error_outline, color: Colors.red.shade800, size: 28),
-                        SizedBox(width: 8),
-                        Text(
-                          '¡ADVERTENCIA!',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red.shade800,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      'Esta acción no se puede deshacer y quedará registrada en el cierre de caja.',
-                      style: TextStyle(
-                        color: Colors.red.shade800,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 20),
-              Text(
-                  'Ingrese la contraseña para confirmar:',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16
-                  )
-              ),
-              SizedBox(height: 10),
-              TextField(
-                controller: passwordController,
-                decoration: InputDecoration(
-                  labelText: 'Contraseña',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.red.shade300, width: 2),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.red.shade300, width: 2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.red.shade500, width: 2),
-                  ),
-                  helperText: 'Máximo 6 dígitos',
-                  prefixIcon: Icon(Icons.password, color: Colors.red.shade500),
-                  filled: true,
-                  fillColor: Colors.red.shade50,
-                ),
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                style: TextStyle(fontSize: 18, letterSpacing: 8),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            Container(
-              margin: EdgeInsets.only(bottom: 10, right: 10),
-              child: TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  'Cancelar',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              margin: EdgeInsets.only(bottom: 10, right: 10),
-              child: ElevatedButton.icon(
-                icon: Icon(Icons.delete_outline, color: Colors.white),
-                label: Text(
-                  'Anular',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade600,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () async {
-                  String inputPassword = passwordController.text;
-                  String storedPassword = await _loadPassword();
-
-                  if (inputPassword == storedPassword) {
-                    Navigator.of(context).pop();
-                    await _cancelLastTransaction();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              Icon(Icons.error_outline, color: Colors.white),
-                              SizedBox(width: 10),
-                              Text('Contraseña incorrecta.'),
-                            ],
-                          ),
-                          backgroundColor: Colors.red.shade700,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        )
-                    );
-                  }
-                },
-              ),
-            ),
-          ],
-          actionsPadding: EdgeInsets.only(right: 10),
-          contentPadding: EdgeInsets.fromLTRB(24, 20, 24, 24),
-          titlePadding: EdgeInsets.fromLTRB(24, 24, 24, 10),
-          backgroundColor: Colors.white,
-        );
-      },
+    await showPasswordDialog(
+      context,
+      HomeHelpers.loadPassword,
+      _cancelLastTransaction,
+      _hasAnulado,
     );
   }
 
   Future<void> _cancelLastTransaction() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    int comprobanteNumber = prefs.getInt('comprobanteNumber') ?? 1;
-
-    if (comprobanteNumber > 1) {
-      comprobanteNumber--;
-      await prefs.setInt('comprobanteNumber', comprobanteNumber);
-    }
+    await HomeHelpers.cancelLastTransaction(context);
 
     final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
     reporteCaja.cancelTransaction();
@@ -2170,96 +954,9 @@ class _HomeState extends State<Home> {
     setState(() {
       _hasAnulado = true;
     });
-
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Última venta anulada.')));
   }
 
-  void _navigateToSettings() async {
-    final settingsChanged = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (context) => Settings()),
-    );
-
-    if (settingsChanged == true) {
-      print('Settings changed, reloading preferences');
-      await _loadDisplayPreferences();
-      setState(() {});
-    }
-  }
-
-  Widget _buildConfigurableButton({
-    required String text,
-    required IconData icon,
-    required Color backgroundColor,
-    required Color borderColor,
-    required Function() onPressed,
-    bool isDisabled = false,
-    Color textColor = Colors.white,
-  }) {
-    double screenWidth = MediaQuery.of(context).size.width;
-    double buttonWidth = screenWidth - (MediaQuery.of(context).size.width * 0.1);
-    double textSize = buttonWidth * 0.056;
-
-    IconData buttonIcon = _getButtonIcon(text, icon);
-
-    return Container(
-      constraints: BoxConstraints(
-        minHeight: 60,
-      ),
-      child: ElevatedButton(
-        onPressed: isDisabled ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundColor,
-          side: BorderSide(
-            color: borderColor,
-            width: 3,
-          ),
-          foregroundColor: textColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          disabledBackgroundColor: Colors.grey,
-          padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        ),
-        child: _showIcons
-            ? Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              buttonIcon,
-              size: textSize * _textSizeMultiplier * 0.9,
-            ),
-            SizedBox(width: 0),
-            Flexible(
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: textSize * _textSizeMultiplier,
-                  height: 1.2,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.visible,
-              ),
-            ),
-          ],
-        )
-            : Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: textSize * _textSizeMultiplier,
-              height: 1.2,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.visible,
-          ),
-        ),
-      ),
-    );
-  }
+  // ==================== BUILD METHOD ====================
 
   @override
   Widget build(BuildContext context) {
@@ -2268,8 +965,6 @@ class _HomeState extends State<Home> {
     double buttonWidth = screenWidth - (marginSize * 2);
     double buttonHeight = 60;
     double textSize = buttonWidth * 0.06;
-    double buttonMargin = 9.0;
-    double _reportButtonLeftMargin = 15;
 
     final ticketModel = Provider.of<TicketModel>(context);
     final sundayTicketModel = Provider.of<SundayTicketModel>(context);
@@ -2279,7 +974,6 @@ class _HomeState extends State<Home> {
         ? sundayTicketModel.pasajes
         : ticketModel.pasajes;
 
-    // Verificar si hay transacciones pendientes para actualizar la interfaz
     bool hasPendingDays = reporteCaja.hasPendingOldTransactions();
 
     return Scaffold(
@@ -2289,222 +983,31 @@ class _HomeState extends State<Home> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Grupo izquierdo - 3 botones juntos con márgenes ajustables
-            Row(
-              children: [
-                // Botón Reportes con badge si hay días pendientes
-                Stack(
-                  children: [
-                    Container(
-                      width: 35,
-                      height: 35,
-                      margin: EdgeInsets.only(left: _reportButtonLeftMargin, right: buttonMargin),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: hasPendingDays ? Colors.red : Color(0xFF1900A2),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.receipt,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                        padding: EdgeInsets.zero,
-                        tooltip: 'Reportes',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-                          );
-                        },
-                      ),
-                    ),
-
-                    // Indicador de días pendientes
-                    if (hasPendingDays)
-                      Positioned(
-                        right: buttonMargin - 5,
-                        top: 0,
-                        child: Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.red, width: 1.5),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '!',
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-
-                // Botón Reimprimir
-                Container(
-                  width: 35,
-                  height: 35,
-                  margin: EdgeInsets.symmetric(horizontal: buttonMargin), // Margen ajustable a ambos lados
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _lastTransaction == null || _isReprinting || _hasReprinted ? Colors.white : Color(0xFFFFD71F),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(21),
-                      onTap: _lastTransaction == null || _isReprinting || _hasReprinted ? null : _handleReprint,
-                      child: Center(
-                        child: Image.asset(
-                          'assets/reprint.png',
-                          width: 32,
-                          height: 32,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Botón Anular
-                Consumer<ReporteCaja>(
-                  builder: (context, reporteCaja, child) {
-                    bool canAnular = reporteCaja.hasActiveTransactions() && !_hasAnulado;
-                    return Container(
-                      width: 35,
-                      height: 35,
-                      margin: EdgeInsets.symmetric(horizontal: buttonMargin), // Margen ajustable a ambos lados
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: canAnular ? Color(0xFFFF0C00) : Colors.white,
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(21),
-                          onTap: canAnular ? () async {
-                            await _showPasswordDialog();
-                          } : null,
-                          child: Center(
-                            child: Icon(
-                              Icons.delete,
-                              color: Colors.black,
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-
-            // Espacio flexible en el medio
-            Spacer(),
-
-            // Grupo derecho - 2 botones + fecha/día
-            Row(
-              children: [
-                // Botón Ajustes
-                Container(
-                  width: 35,
-                  height: 35,
-                  margin: EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF000000),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(21),
-                      onTap: _navigateToSettings,
-                      child: Center(
-                        child: Icon(
-                          Icons.settings,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Fecha y Día con aviso de pendientes
-                Stack(
-                  children: [
-                    Container(
-                      margin: EdgeInsets.only(left: 0, right: 5),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            getCurrentDate(),
-                            style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold
-                            ),
-                          ),
-                          Text(
-                            _currentDay,
-                            style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Indicador de alerta si hay días pendientes
-                    if (hasPendingDays)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1.5),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '!',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
+            // Slots del AppBar usando el widget modular
+            ...List.generate(_appBarSlots.length, (index) {
+              return HomeAppBarWidgets.buildAppBarSlotWidget(
+                context: context,
+                slot: _appBarSlots[index],
+                currentDay: _currentDay,
+                lastTransaction: _lastTransaction,
+                hasReprinted: _hasReprinted,
+                hasAnulado: _hasAnulado,
+                isReprinting: _isReprinting,
+                getCurrentDate: HomeHelpers.getCurrentDate,
+                onNavigateToSettings: _navigateToSettings,
+                onShowOfferDialog: _showOfferDialog,
+                onShowPasswordDialog: _showPasswordDialog,
+                onHandleReprint: _handleReprint,
+              );
+            }),
           ],
         ),
         titleSpacing: 0,
       ),
 
-      // Banner de advertencia si hay días pendientes
       body: Column(
         children: [
-          // Mostrar banner si hay transacciones pendientes
+          // Banner de advertencia si hay días pendientes
           if (hasPendingDays)
             Container(
               width: double.infinity,
@@ -2527,12 +1030,7 @@ class _HomeState extends State<Home> {
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-                      );
-                    },
+                    onPressed: _navigateToReports,
                   ),
                 ],
               ),
@@ -2585,7 +1083,6 @@ class _HomeState extends State<Home> {
                                       ),
                                     ),
                                   ),
-
                                   Expanded(
                                     child: Container(
                                       decoration: BoxDecoration(
@@ -2599,7 +1096,6 @@ class _HomeState extends State<Home> {
                                   ),
                                 ],
                               ),
-
                               Positioned(
                                 left: 13,
                                 child: Consumer<ReporteCaja>(
@@ -2610,8 +1106,8 @@ class _HomeState extends State<Home> {
 
                                     var allTransactions = reporteCaja.getOrderedTransactions();
                                     var todayTransactions = allTransactions.where((t) =>
-                                    t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                        !t['nombre'].toString().startsWith('Anulación:')
+                                        t['dia'] == todayDay && t['mes'] == todayMonth &&
+                                            !t['nombre'].toString().startsWith('Anulación:')
                                     ).toList();
 
                                     return Text(
@@ -2626,7 +1122,6 @@ class _HomeState extends State<Home> {
                                   },
                                 ),
                               ),
-
                               Positioned(
                                 right: 13,
                                 child: Consumer<ReporteCaja>(
@@ -2637,8 +1132,8 @@ class _HomeState extends State<Home> {
 
                                     var allTransactions = reporteCaja.getOrderedTransactions();
                                     var todayAnulaciones = allTransactions.where((t) =>
-                                    t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                        t['nombre'].toString().startsWith('Anulación:')
+                                        t['dia'] == todayDay && t['mes'] == todayMonth &&
+                                            t['nombre'].toString().startsWith('Anulación:')
                                     ).toList();
 
                                     return Text(
@@ -2653,7 +1148,6 @@ class _HomeState extends State<Home> {
                                   },
                                 ),
                               ),
-
                               Consumer<ReporteCaja>(
                                 builder: (context, reporteCaja, child) {
                                   DateTime today = DateTime.now();
@@ -2661,15 +1155,14 @@ class _HomeState extends State<Home> {
                                   String todayMonth = DateFormat('MM').format(today);
 
                                   var allTransactions = reporteCaja.getOrderedTransactions();
-
                                   var todayTransactions = allTransactions.where((t) =>
-                                  t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                      !t['nombre'].toString().startsWith('Anulación:')
+                                      t['dia'] == todayDay && t['mes'] == todayMonth &&
+                                          !t['nombre'].toString().startsWith('Anulación:')
                                   ).toList();
 
                                   var todayAnulaciones = allTransactions.where((t) =>
-                                  t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                      t['nombre'].toString().startsWith('Anulación:')
+                                      t['dia'] == todayDay && t['mes'] == todayMonth &&
+                                          t['nombre'].toString().startsWith('Anulación:')
                                   ).toList();
 
                                   int netCount = todayTransactions.length - todayAnulaciones.length;
@@ -2706,7 +1199,6 @@ class _HomeState extends State<Home> {
                             ],
                           ),
                         ),
-
                         Consumer<ComprobanteModel>(
                           builder: (context, comprobanteModel, child) {
                             return Container(
@@ -2755,7 +1247,6 @@ class _HomeState extends State<Home> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Contenedor del switch a la izquierda
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.black.withOpacity(0.5),
@@ -2789,7 +1280,6 @@ class _HomeState extends State<Home> {
                                   ],
                                 ),
                                 SizedBox(height: 5),
-
                                 Switch(
                                   value: _switchValue,
                                   onChanged: (value) {
@@ -2804,14 +1294,12 @@ class _HomeState extends State<Home> {
                             ),
                           ),
 
-                          // Columna derecha con botón de emergencia y logo
                           Container(
                             margin: const EdgeInsets.only(right: 16.0),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Botón de emergencia para ir directamente a cierre de caja si hay pendientes
                                 if (hasPendingDays)
                                   Container(
                                     margin: EdgeInsets.only(bottom: 10),
@@ -2824,12 +1312,7 @@ class _HomeState extends State<Home> {
                                         backgroundColor: Colors.red,
                                         padding: EdgeInsets.symmetric(horizontal: 5),
                                       ),
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-                                        );
-                                      },
+                                      onPressed: _navigateToReports,
                                     ),
                                   ),
                                 Image.asset(
@@ -2853,7 +1336,8 @@ class _HomeState extends State<Home> {
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: pasajes[0]['nombre'],
                           icon: Icons.people,
                           backgroundColor: _switchValue ? Colors.grey : Colors.red,
@@ -2861,14 +1345,17 @@ class _HomeState extends State<Home> {
                           onPressed: () {
                             _generateTicket(pasajes[0]['nombre'], pasajes[0]['precio'], false);
                           },
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
-
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: pasajes[4]['nombre'],
                           icon: Icons.map,
                           backgroundColor: _switchValue ? Colors.red : Colors.green,
@@ -2876,6 +1363,9 @@ class _HomeState extends State<Home> {
                           onPressed: () {
                             _generateTicket(pasajes[4]['nombre'], pasajes[4]['precio'], false);
                           },
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
@@ -2890,7 +1380,8 @@ class _HomeState extends State<Home> {
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: pasajes[1]['nombre'],
                           icon: Icons.school,
                           backgroundColor: _switchValue ? Colors.red : Colors.green,
@@ -2898,14 +1389,17 @@ class _HomeState extends State<Home> {
                           onPressed: () {
                             _generateTicket(pasajes[1]['nombre'], pasajes[1]['precio'], false);
                           },
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
-
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: pasajes[3]['nombre'],
                           icon: Icons.directions_bus,
                           backgroundColor: _switchValue ? Colors.red : Colors.blue,
@@ -2913,6 +1407,9 @@ class _HomeState extends State<Home> {
                           onPressed: () {
                             _generateTicket(pasajes[3]['nombre'], pasajes[3]['precio'], false);
                           },
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
@@ -2927,7 +1424,8 @@ class _HomeState extends State<Home> {
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: pasajes[2]['nombre'],
                           icon: Icons.elderly,
                           backgroundColor: _switchValue ? Colors.green : Colors.blue,
@@ -2935,34 +1433,34 @@ class _HomeState extends State<Home> {
                           onPressed: () {
                             _generateTicket(pasajes[2]['nombre'], pasajes[2]['precio'], false);
                           },
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
-
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: pasajes.length > 5 ? pasajes[5]['nombre'] : 'Escolar Intermedio',
                           icon: Icons.school_outlined,
                           backgroundColor: _switchValue ? Colors.white : Colors.white,
                           borderColor: _switchValue ? Colors.black : Colors.black,
                           textColor: Colors.black,
                           onPressed: () {
-                            // Asegurar que hay al menos 6 elementos en la lista
                             if (pasajes.length > 5) {
-                              // Usar directamente el sexto elemento (índice 5)
                               _generateTicket(pasajes[5]['nombre'], pasajes[5]['precio'], false);
                             } else {
-                              // En el improbable caso que no exista, usar un precio por defecto
                               double defaultPrice = _switchValue ? 1300.0 : 1000.0;
                               _generateTicket('Escolar Intermedio', defaultPrice, false);
-
-                              // Y generar un mensaje de advertencia
-                              print('ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. ' +
-                                  'Usando precio por defecto: $defaultPrice');
+                              print('ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
                             }
                           },
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
@@ -2970,34 +1468,41 @@ class _HomeState extends State<Home> {
                   ),
                   SizedBox(height: 5),
 
-                  // Cuarta fila: Multi Oferta y Cargo (con modificaciones para deshabilitar si hay cajas pendientes)
+                  // Cuarta fila: Multi Oferta y Cargo
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: 'O F E R T A',
                           icon: Icons.local_offer,
                           backgroundColor: hasPendingDays ? Colors.grey.shade300 : Colors.orange,
                           borderColor: Colors.black,
                           textColor: Colors.black,
                           onPressed: _showMultiOfferDialog,
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
-
                       SizedBox(
                         width: (buttonWidth / 2) - 10,
                         height: buttonHeight,
-                        child: _buildConfigurableButton(
+                        child: HomeButtons.buildConfigurableButton(
+                          context: context,
                           text: 'C A R G O',
                           icon: Icons.inventory,
                           textColor: Colors.black,
                           backgroundColor: _isButtonDisabled || hasPendingDays ? Colors.grey : Colors.orange,
                           borderColor: Colors.black,
                           onPressed: _showOfferDialog,
+                          showIcons: _showIcons,
+                          textSizeMultiplier: _textSizeMultiplier,
+                          buttonIcons: _buttonIcons,
                           isDisabled: _isButtonDisabled || hasPendingDays,
                         ),
                       ),
@@ -3012,35 +1517,4 @@ class _HomeState extends State<Home> {
       ),
     );
   }
-
-  void _clearCacheIfNeeded() {
-    print('Liberando memoria para PDF...');
-    pdfOptimizer.clearCache();
-    _resourcesPreloaded = false;
-
-    // También podemos liberar otras cachés si es necesario
-    if (generateTicket.resourcesPreloaded) {
-      generateTicket.optimizer.clearCache();
-      generateTicket.resourcesPreloaded = false;
-    }
-  }
-
-  // Variables para la configuración de botones
-  bool _showIcons = true;
-  double _textSizeMultiplier = 0.8;
-  double _iconSpacing = 1.0;
-  Map<String, IconData> _buttonIcons = {};
-
-  // Variables para la función de reimpresión
-  Map<String, dynamic>? _lastTransaction;
-  bool _isReprinting = false;
-
-  // Variables para configurar AppBar
-  Map<String, dynamic> _appBarConfig = {
-    'report': {'name': 'Reportes', 'icon': Icons.print, 'position': 0, 'enabled': true},
-    'delete': {'name': 'Anular', 'icon': Icons.delete, 'position': 1, 'enabled': true},
-    'reprint': {'name': 'Reimprimir', 'icon': Icons.print, 'position': 2, 'enabled': true},
-    'settings': {'name': 'Configuración', 'icon': Icons.settings, 'position': 3, 'enabled': true},
-    'date': {'name': 'Fecha/Día', 'icon': Icons.calendar_today, 'position': 4, 'enabled': true},
-  };
 }
