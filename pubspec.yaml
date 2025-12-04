@@ -22,11 +22,11 @@ dependencies:
   provider: ^6.0.0
   shared_preferences: ^2.0.0
   path_provider: ^2.1.5
-  file_picker: ^8.3.1
+  file_picker: ^5.5.0  # Bajado de 8.3.1 para compatibilidad con API 23
   excel: ^2.0.0
-  permission_handler: ^11.3.1
+  permission_handler: ^10.4.5  # Bajado de 11.3.1 para compatibilidad con API 23
   url_launcher: ^6.0.20
-  share_plus: ^10.1.4
+  share_plus: ^7.2.2  # Bajado de 10.1.4 para compatibilidad con API 23
   archive: ^3.3.7
   cupertino_icons: ^1.0.8
 
