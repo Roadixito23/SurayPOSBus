@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.untitled3"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 23
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.example.untitled3"
         minSdk = 23
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 23
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
