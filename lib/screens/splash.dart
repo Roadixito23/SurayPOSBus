@@ -11,6 +11,8 @@ import '../models/ComprobanteModel.dart';
 import '../models/ReporteCaja.dart';
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }
@@ -173,7 +175,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             SizedBox(height: 40),
 
             // Loading indicators
-            Container(
+            SizedBox(
               width: 240,
               child: Column(
                 children: [

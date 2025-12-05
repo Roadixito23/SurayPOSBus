@@ -39,7 +39,7 @@ Future<Uint8List> generateRecoveryPdf(String dia) async {
           pw.SizedBox(height: 5),
           ...abbreviations.entries.map((entry) {
             return pw.Text('${entry.key}: ${entry.value}', style: pw.TextStyle(fontSize: 12));
-          }).toList(),
+          }),
         ],
       ),
     ),

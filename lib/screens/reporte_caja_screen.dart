@@ -15,6 +15,8 @@ import '../services/report/report_cleaner.dart';
 import 'reporte_recovery.dart'; // Import for navigation
 
 class ReporteCajaScreen extends StatefulWidget {
+  const ReporteCajaScreen({super.key});
+
   @override
   _ReporteCajaScreenState createState() => _ReporteCajaScreenState();
 }
@@ -289,11 +291,11 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
             onPressed: () => Navigator.of(context).pop(false),
           ),
           ElevatedButton(
-            child: Text('Confirmar'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.coral,
             ),
             onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Confirmar'),
           ),
         ],
       ),

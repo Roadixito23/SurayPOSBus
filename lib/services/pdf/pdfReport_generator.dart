@@ -147,16 +147,16 @@ class PdfReportGenerator {
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(4),
-                            child: pw.Text('$valuePrefix\$${formattedValue}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9)),
+                            child: pw.Text('$valuePrefix\$$formattedValue', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9)),
                           ),
                         ],
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
                 pw.SizedBox(height: 5),
                 // Mostrar total
-                pw.Text('Total: $signPrefix\$${formattedTotalValue}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('Total: $signPrefix\$$formattedTotalValue', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 10),
               ],
             );
@@ -288,7 +288,7 @@ class PdfReportGenerator {
               if (difference > maxDaysToKeep) {
                 await entity.delete();
                 cleanedCount++;
-                print('Eliminado reporte antiguo: $fileName (${difference} días)');
+                print('Eliminado reporte antiguo: $fileName ($difference días)');
               }
             } catch (e) {
               print('Error al procesar archivo para limpieza: $fileName - $e');
@@ -306,7 +306,7 @@ class PdfReportGenerator {
               if (difference > maxDaysToKeep) {
                 await entity.delete();
                 cleanedCount++;
-                print('Eliminado informe diario antiguo: $fileName (${difference} días)');
+                print('Eliminado informe diario antiguo: $fileName ($difference días)');
               }
             } catch (e) {
               print('Error al procesar archivo para limpieza: $fileName - $e');
@@ -473,7 +473,7 @@ Total del Día: \$${totalDelDia.toStringAsFixed(2)}
     }
 
     // Crear el nuevo nombre de archivo con el número
-    String newFileName = '$baseFileName(${nuevoNumero}).pdf';
+    String newFileName = '$baseFileName($nuevoNumero).pdf';
     final filePath = '${directory.path}/$newFileName';
     final file = File(filePath);
 

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import '../models/ComprobanteModel.dart';
 import '../models/ReporteCaja.dart';
 import '../services/pdf/generateCargo_Ticket.dart';
 
 class CargoScreen extends StatefulWidget {
   final Function(Map<String, dynamic>)? onTransactionComplete;
-  CargoScreen({this.onTransactionComplete});
+  const CargoScreen({super.key, this.onTransactionComplete});
 
   @override
   _CargoScreenState createState() => _CargoScreenState();

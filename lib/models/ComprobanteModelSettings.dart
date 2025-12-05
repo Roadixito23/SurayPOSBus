@@ -5,13 +5,14 @@ import 'ComprobanteModel.dart';
 import 'ReporteCaja.dart';  // ← Import necesario para chequear transacciones
 
 class ComprobanteModelSettings extends StatefulWidget {
+  const ComprobanteModelSettings({super.key});
+
   @override
   _ComprobanteModelSettingsState createState() => _ComprobanteModelSettingsState();
 }
 
 class _ComprobanteModelSettingsState extends State<ComprobanteModelSettings> {
   final TextEditingController _pwdCtrl = TextEditingController();
-  String _currentPwd = '';
 
   @override
   void initState() {
@@ -20,9 +21,8 @@ class _ComprobanteModelSettingsState extends State<ComprobanteModelSettings> {
   }
 
   Future<void> _loadPwd() async {
-    final prefs = await SharedPreferences.getInstance();
+    await SharedPreferences.getInstance();
     setState(() {
-      _currentPwd = prefs.getString('comprobanteSettingsPassword') ?? '';
     });
   }
 

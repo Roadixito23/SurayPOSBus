@@ -10,6 +10,8 @@ import '../theme/app_animations.dart';
 import '../services/report/report_cleaner.dart';
 
 class RecoveryReport extends StatefulWidget {
+  const RecoveryReport({super.key});
+
   @override
   _RecoveryReportState createState() => _RecoveryReportState();
 }
@@ -255,7 +257,7 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
       final sizeInBytes = fileStats.size;
 
       if (sizeInBytes < 1024) {
-        return '${sizeInBytes} B';
+        return '$sizeInBytes B';
       } else if (sizeInBytes < 1024 * 1024) {
         return '${(sizeInBytes / 1024).toStringAsFixed(1)} KB';
       } else {
@@ -975,11 +977,11 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
                               onPressed: () => Navigator.of(context).pop(false),
                             ),
                             ElevatedButton(
-                              child: Text('Confirmar'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.coral,
                               ),
                               onPressed: () => Navigator.of(context).pop(true),
+                              child: Text('Confirmar'),
                             ),
                           ],
                           shape: RoundedRectangleBorder(

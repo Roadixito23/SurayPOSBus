@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 class ReporteCaja extends ChangeNotifier {
-  List<Map<String, dynamic>> _transactions = [];
+  final List<Map<String, dynamic>> _transactions = [];
   int _nextId = 1;
 
   // Nueva clase de transacción para guardar correctamente los datos por día

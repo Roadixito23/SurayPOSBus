@@ -11,6 +11,8 @@ import '../models/ComprobanteModelSettings.dart';
 
 
 class Settings extends StatefulWidget {
+  const Settings({super.key});
+
   @override
   _SettingsState createState() => _SettingsState();
 }
@@ -49,10 +51,13 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancelar')),
             ElevatedButton(
               onPressed: () {
-                if (entry == allowed) Navigator.pop(ctx, true);
-                else ScaffoldMessenger.of(context).showSnackBar(
+                if (entry == allowed) {
+                  Navigator.pop(ctx, true);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Contraseña incorrecta'))
                 );
+                }
               },
               child: Text('OK'),
             ),
@@ -66,7 +71,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   double _iconSpacing = 1.0;
 
   // Map to store icon selections for each button type
-  Map<String, String> _buttonIcons = {
+  final Map<String, String> _buttonIcons = {
     'Público General': 'people',
     'Escolar General': 'school',
     'Adulto Mayor': 'elderly',
@@ -78,7 +83,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   };
 
   // AppBar elements configuration
-  Map<String, dynamic> _appBarElements = {
+  final Map<String, dynamic> _appBarElements = {
     'report': {
       'name': 'Reportes',
       'icon': Icons.receipt,
@@ -211,8 +216,9 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     _tabController.dispose();
     passwordController.dispose();
     idController.dispose();
-    _abbreviationControllers.values.forEach((controller) =>
-        controller.dispose());
+    for (var controller in _abbreviationControllers.values) {
+      controller.dispose();
+    }
 
     super.dispose();
   }
@@ -447,7 +453,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Seleccionar Ícono para "$buttonName"'),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             child: GridView.builder(
               shrinkWrap: true,
@@ -1373,7 +1379,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     subtitle: Text(
                         'Muestra íconos junto al texto en los botones'),
                     value: _showIcons,
-                    activeColor: primaryColor,
+                    activeThumbColor: primaryColor,
                     onChanged: (value) {
                       setState(() {
                         _showIcons = value;
@@ -1813,7 +1819,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                   ),
                   Switch(
                     value: elementData['enabled'],
-                    activeColor: primaryColor,
+                    activeThumbColor: primaryColor,
                     onChanged: (value) {
                       setState(() {
                         elementData['enabled'] = value;
@@ -1889,7 +1895,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
             // Switch to enable/disable the element
             Switch(
               value: _appBarElements[key]['enabled'],
-              activeColor: primaryColor,
+              activeThumbColor: primaryColor,
               onChanged: (value) {
                 setState(() {
                   _appBarElements[key]['enabled'] = value;
@@ -1963,7 +1969,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                         SizedBox(height: 8),
                       ],
                     );
-                  }).toList(),
+                  }),
 
                   SizedBox(height: 20),
 

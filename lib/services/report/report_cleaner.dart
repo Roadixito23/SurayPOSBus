@@ -35,7 +35,7 @@ class ReportCleaner {
               if (difference > retentionDays) {
                 await entity.delete();
                 cleanedCount++;
-                debugPrint('Eliminado reporte antiguo: $fileName (${difference} días)');
+                debugPrint('Eliminado reporte antiguo: $fileName ($difference días)');
               }
             } catch (e) {
               debugPrint('Error al procesar archivo para limpieza: $fileName - $e');

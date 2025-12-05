@@ -85,7 +85,7 @@ class MoTicketGenerator {
       print('Error generating MO ticket: $e');
       // Clear resources on error
       _optimizer.clearCache();
-      throw e;
+      rethrow;
     }
   }
 
@@ -134,7 +134,7 @@ class MoTicketGenerator {
       print('Error en reprintMoTicket: $e');
       // Clear resources on error
       _optimizer.clearCache();
-      throw e;
+      rethrow;
     }
   }
 
@@ -273,7 +273,7 @@ class MoTicketGenerator {
                             ),
                           ],
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
                 ),

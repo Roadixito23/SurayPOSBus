@@ -138,7 +138,7 @@ class AppAnimations {
     return AnimatedBuilder(
       animation: heightAnimation,
       builder: (context, _) {
-        return Container(
+        return SizedBox(
           height: heightAnimation.value,
           child: child,
         );

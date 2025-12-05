@@ -127,7 +127,7 @@ Future<void> showLastCargoReprintOptions(
         ),
         actions: [
           // Fila de botones en dos columnas
-          Container(
+          SizedBox(
             width: double.infinity,
             child: Column(
               mainAxisSize: MainAxisSize.min,

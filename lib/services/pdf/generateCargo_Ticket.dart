@@ -325,7 +325,7 @@ class CargoTicketGenerator {
       print('Error generating cargo PDF: $e');
       // Clear resources in case of error
       _optimizer.clearCache();
-      throw e;
+      rethrow;
     }
   }
 
@@ -515,7 +515,7 @@ class CargoTicketGenerator {
     } catch (e) {
       print('Error reprinting cargo PDF: $e');
       _optimizer.clearCache();
-      throw e;
+      rethrow;
     }
   }
 

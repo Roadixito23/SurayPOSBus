@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../services/backup/backup_service.dart';
 
 class BackupScreen extends StatefulWidget {
+  const BackupScreen({super.key});
+
   @override
   _BackupScreenState createState() => _BackupScreenState();
 }
@@ -318,7 +318,7 @@ class _BackupScreenState extends State<BackupScreen> with SingleTickerProviderSt
 
   String _formatFileSize(int sizeInBytes) {
     if (sizeInBytes < 1024) {
-      return '${sizeInBytes} B';
+      return '$sizeInBytes B';
     } else if (sizeInBytes < 1024 * 1024) {
       return '${(sizeInBytes / 1024).toStringAsFixed(1)} KB';
     } else {

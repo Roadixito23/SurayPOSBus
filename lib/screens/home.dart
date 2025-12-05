@@ -30,6 +30,8 @@ import '../widgets/home/home_app_bar_widgets.dart';
 import '../widgets/home/home_buttons.dart';
 
 class Home extends StatefulWidget {
+  const Home({super.key});
+
   @override
   _HomeState createState() => _HomeState();
 }
@@ -615,7 +617,7 @@ class _HomeState extends State<Home> {
               setupControllerListeners();
             }
 
-            Future<void> _submitAndPrint() async {
+            Future<void> submitAndPrint() async {
               dialogSetState(() => isLoading = true);
               Navigator.of(dialogContext).pop();
               if (!mounted) return;
@@ -735,7 +737,6 @@ class _HomeState extends State<Home> {
                               ),
                             ),
                             TextButton(
-                              child: Text('Ir a Reportes'),
                               onPressed: () {
                                 Navigator.of(dialogContext).pop();
                                 _navigateToReports();
@@ -745,6 +746,7 @@ class _HomeState extends State<Home> {
                                 foregroundColor: Colors.orange.shade900,
                                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
+                              child: Text('Ir a Reportes'),
                             ),
                           ],
                         ),
@@ -882,7 +884,7 @@ class _HomeState extends State<Home> {
                             ),
                           ),
                           ElevatedButton.icon(
-                            onPressed: _submitAndPrint,
+                            onPressed: submitAndPrint,
                             icon: Icon(Icons.print),
                             label: Text('Imprimir'),
                             style: ElevatedButton.styleFrom(
@@ -1024,13 +1026,13 @@ class _HomeState extends State<Home> {
                     ),
                   ),
                   ElevatedButton(
-                    child: Text('Cerrar Caja'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade700,
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     onPressed: _navigateToReports,
+                    child: Text('Cerrar Caja'),
                   ),
                 ],
               ),
@@ -1287,7 +1289,7 @@ class _HomeState extends State<Home> {
                                       _switchValue = value;
                                     });
                                   },
-                                  activeColor: Colors.red,
+                                  activeThumbColor: Colors.red,
                                   activeTrackColor: Colors.red.withOpacity(0.5),
                                 ),
                               ],

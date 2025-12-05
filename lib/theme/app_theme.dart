@@ -89,7 +89,7 @@ class AppTheme {
     colorScheme: ColorScheme.light(
       primary: turquoise,
       secondary: coral,
-      background: background,
+      surface: background,
     ),
     scaffoldBackgroundColor: background,
     appBarTheme: AppBarTheme(

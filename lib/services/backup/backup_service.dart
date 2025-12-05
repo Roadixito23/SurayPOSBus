@@ -309,7 +309,7 @@ class BackupService {
     // Procesar cada clave
     for (final key in keysToProcess) {
       final value = data[key];
-      final String? typeKey = '${key}_type';
+      final String typeKey = '${key}_type';
       final String? valueType = data.containsKey(typeKey) ? data[typeKey] as String? : null;
 
       try {

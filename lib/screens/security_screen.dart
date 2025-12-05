@@ -5,6 +5,8 @@ import 'dart:async';
 import 'home.dart';
 
 class SecurityScreen extends StatefulWidget {
+  const SecurityScreen({super.key});
+
   @override
   _SecurityScreenState createState() => _SecurityScreenState();
 }
