@@ -14,11 +14,6 @@ class PdfReportGenerator {
   Future<Uint8List> generatePdf(List<Map<String, dynamic>> transactions, double total, DateTime reportDate) async {
     final pdf = pw.Document();
 
-    // Cargar el logo como ByteData y convertirlo a Uint8List
-    final ByteData logoData = await rootBundle.load('assets/logo.png');
-    final Uint8List logoBytes = logoData.buffer.asUint8List();
-    final pw.MemoryImage logoImage = pw.MemoryImage(logoBytes);
-
     // Formatear el total
     String formattedTotal = NumberFormat('#,##0', 'es_ES').format(total);
 
@@ -72,6 +67,12 @@ class PdfReportGenerator {
           // Función para crear tablas
           pw.Widget buildTable(String title, List<Map<String, dynamic>> transactionList) {
             if (transactionList.isEmpty) {
+              // Para Anulaciones, no mostrar mensaje "No hay transacciones"
+              // El mensaje se mostrará fuera de la tabla
+              if (title == 'Anulaciones') {
+                return pw.SizedBox(height: 0);
+              }
+
               return pw.Column(
                 children: [
                   pw.Text(title, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
@@ -181,9 +182,25 @@ class PdfReportGenerator {
 
           return pw.Column(
             children: [
-              // Logo al inicio
-              pw.Center(
-                child: pw.Image(logoImage, width: 60 * PdfPageFormat.mm, height: 28 * PdfPageFormat.mm),
+              // Información de la empresa
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    'Transportes Suray Limitada',
+                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.Text(
+                    '77.799.670-3',
+                    style: pw.TextStyle(fontSize: 11),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Eusebio Ibar 630',
+                    style: pw.TextStyle(fontSize: 11),
+                  ),
+                ],
               ),
               pw.SizedBox(height: 5),
 

@@ -34,28 +34,34 @@ class HomeAppBarWidgets {
 
     // Report button (usually in slot 0)
     if (elementKey == 'report') {
-      return Container(
-        width: 25,
-        height: 25,
-        margin: EdgeInsets.only(left: 20 + leftMargin),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Color(0xFF4F8FC0), // primary
-        ),
-        child: IconButton(
-          icon: Icon(
-            Icons.print,
-            color: Colors.white,
-            size: 24,
+      return Padding(
+        padding: EdgeInsets.only(left: 8 + leftMargin, right: 3),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color(0xFF4F8FC0), // primary
           ),
-          padding: EdgeInsets.zero,
-          tooltip: 'Reportes',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-            );
-          },
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
+                );
+              },
+              child: Center(
+                child: Icon(
+                  Icons.menu,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -68,22 +74,22 @@ class HomeAppBarWidgets {
           builder: (context, reporteCaja, child) {
             bool canAnular = reporteCaja.hasActiveTransactions() && !hasAnulado;
             return Container(
-              width: 35,
-              height: 35,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: canAnular ? Color(0xFFE57373) : Colors.white, // error
+                color: canAnular ? Color(0xFFE57373) : Colors.grey.shade300,
               ),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(21),
+                  borderRadius: BorderRadius.circular(20),
                   onTap: canAnular ? onShowPasswordDialog : null,
                   child: Center(
                     child: Icon(
                       Icons.delete,
-                      color: Colors.black,
-                      size: 24,
+                      color: canAnular ? Colors.white : Colors.grey.shade600,
+                      size: 22,
                     ),
                   ),
                 ),
@@ -103,23 +109,22 @@ class HomeAppBarWidgets {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3.0),
         child: Container(
-          width: 34,
-          height: 34,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: canReprint ? Color(0xFFF2C94C) : Colors.white, // accent
+            color: canReprint ? Color(0xFFF2C94C) : Colors.grey.shade300,
           ),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(21),
+              borderRadius: BorderRadius.circular(20),
               onTap: canReprint ? onHandleReprint : null,
               child: Center(
-                child: Image.asset(
-                  'assets/reprint.png',
-                  width: 20,
-                  height: 20,
-                  fit: BoxFit.contain,
+                child: Icon(
+                  Icons.print,
+                  color: canReprint ? Colors.white : Colors.grey.shade600,
+                  size: 22,
                 ),
               ),
             ),
@@ -133,8 +138,8 @@ class HomeAppBarWidgets {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3.0),
         child: Container(
-          width: 34,
-          height: 34,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Color(0xFF6FCF97), // secondary
@@ -142,13 +147,13 @@ class HomeAppBarWidgets {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(21),
+              borderRadius: BorderRadius.circular(20),
               onTap: onNavigateToSettings,
               child: Center(
                 child: Icon(
                   Icons.settings,
                   color: Colors.white,
-                  size: 24,
+                  size: 22,
                 ),
               ),
             ),
@@ -192,8 +197,8 @@ class HomeAppBarWidgets {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3.0),
                 child: Container(
-                  width: 34,
-                  height: 34,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.purple,
@@ -201,13 +206,13 @@ class HomeAppBarWidgets {
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(21),
+                      borderRadius: BorderRadius.circular(20),
                       onTap: onShowOfferDialog,
                       child: Center(
                         child: Icon(
                           Icons.mail,
                           color: Colors.white,
-                          size: 20,
+                          size: 22,
                         ),
                       ),
                     ),
@@ -221,19 +226,19 @@ class HomeAppBarWidgets {
                   right: 0,
                   top: 0,
                   child: Container(
-                    width: 16,
-                    height: 16,
+                    width: 18,
+                    height: 18,
                     decoration: BoxDecoration(
                       color: Colors.red,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
                     child: Center(
                       child: Text(
                         '!',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

@@ -285,8 +285,9 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
               value.forEach((propKey, propValue) {
                 if (propKey == 'icon') {
                   // Convert stored codePoint back to IconData
+                  // Use int to avoid tree-shake issue with dynamic IconData
                   elementCopy[propKey] = IconData(
-                    propValue,
+                    int.parse(propValue.toString()),
                     fontFamily: 'MaterialIcons',
                   );
                 } else if (propKey == 'bgColor' || propKey == 'iconColor') {

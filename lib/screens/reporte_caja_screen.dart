@@ -432,31 +432,106 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     final oldestPendingDays = reporteCaja.getOldestPendingDays();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Text(
-              'Reporte de Caja',
-              style: TextStyle(
-                fontFamily: AppTheme.fontHemiheads,
-                fontWeight: FontWeight.bold,
-              ),
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(56),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppTheme.turquoise, AppTheme.turquoiseDark],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-          ],
-        ),
-        backgroundColor: AppTheme.turquoise,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
-        ),
-        actions: [
-          // Nuevo botón para navegar a reportes antiguos
-          IconButton(
-            icon: Icon(Icons.history),
-            onPressed: _navigateToOldReports,
-            tooltip: 'Reportes Antiguos',
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.turquoise.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
-        ],
+          child: AppBar(
+            title: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.assessment_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Reporte de Caja',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontHemiheads,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (transactions.isNotEmpty)
+                      Text(
+                        '${transactions.length} transacciones',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            actions: [
+              // Badge con notificación de transacciones pendientes
+              Stack(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.history_rounded, color: Colors.white),
+                    onPressed: _navigateToOldReports,
+                    tooltip: 'Reportes Antiguos',
+                  ),
+                  if (hasOldTransactions)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: AnimatedContainer(
+                        duration: Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: AppTheme.coral,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.coral.withValues(alpha: 0.5),
+                              blurRadius: 4,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              SizedBox(width: 8),
+            ],
+          ),
+        ),
       ),
       body: Stack(
         children: [
@@ -470,7 +545,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
               color: AppTheme.turquoise,
               child: SingleChildScrollView(
                 physics: AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.all(16),
+                padding: EdgeInsets.only(top: 72, left: 16, right: 16, bottom: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -481,7 +556,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                         child: AppAnimations.pulse(
                           controller: _pulseController,
                           child: Card(
-                            color: AppTheme.coralLight.withOpacity(0.8),
+                            color: AppTheme.coralLight.withValues(alpha: 0.8),
                             elevation: 3,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -828,7 +903,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                                     IconData iconData = Icons.receipt;
 
                                     if (isPastDay) {
-                                      cardColor = AppTheme.coralLight.withOpacity(0.2);
+                                      cardColor = AppTheme.coralLight.withValues(alpha: 0.2);
                                       borderColor = AppTheme.coral;
                                       iconColor = AppTheme.coral;
                                       iconData = Icons.warning_amber_rounded;
@@ -859,21 +934,36 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                                           child: child!,
                                         );
                                       },
-                                      child: Card(
-                                        elevation: 2,
+                                      child: AnimatedContainer(
+                                        duration: Duration(milliseconds: 600),
+                                        curve: Curves.easeInOut,
                                         margin: EdgeInsets.symmetric(vertical: 6),
-                                        color: cardColor,
-                                        shape: RoundedRectangleBorder(
+                                        decoration: BoxDecoration(
+                                          color: cardColor,
                                           borderRadius: BorderRadius.circular(12),
-                                          side: BorderSide(
+                                          border: Border.all(
                                             color: borderColor,
                                             width: 1,
                                           ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: 0.1),
+                                              blurRadius: 4,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
                                         ),
                                         child: ListTile(
                                           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          leading: CircleAvatar(
-                                            backgroundColor: iconColor,
+                                          leading: AnimatedContainer(
+                                            duration: Duration(milliseconds: 600),
+                                            curve: Curves.easeInOut,
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: iconColor,
+                                              shape: BoxShape.circle,
+                                            ),
                                             child: Icon(
                                               iconData,
                                               color: Colors.white,
@@ -927,7 +1017,9 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                                               ),
                                             ],
                                           ),
-                                          trailing: Container(
+                                          trailing: AnimatedContainer(
+                                            duration: Duration(milliseconds: 600),
+                                            curve: Curves.easeInOut,
                                             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
                                               color: isAnulacion

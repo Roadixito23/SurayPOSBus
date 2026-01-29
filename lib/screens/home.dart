@@ -26,6 +26,7 @@ import '../widgets/home/password_dialogs.dart';
 import '../widgets/home/reprint_dialogs.dart';
 import '../widgets/home/home_app_bar_widgets.dart';
 import '../widgets/home/home_buttons.dart';
+import '../widgets/home/transaction_counter_widget.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -60,7 +61,8 @@ class _HomeState extends State<Home> {
   final FocusNode _contactFocusNode = FocusNode();
 
   // Configuración del AppBar
-  List<Map<String, dynamic>> _appBarSlots = List.generate(8, (index) => {'isEmpty': true, 'element': null});
+  List<Map<String, dynamic>> _appBarSlots =
+      List.generate(8, (index) => {'isEmpty': true, 'element': null});
 
   // Variables para la configuración de botones
   bool _showIcons = true;
@@ -94,12 +96,15 @@ class _HomeState extends State<Home> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
-        final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
+        final comprobanteModel =
+            Provider.of<ComprobanteModel>(context, listen: false);
 
-        await _resourcePreloader.preloadPdfResourcesAsync(context, comprobanteModel, reporteCaja);
+        await _resourcePreloader.preloadPdfResourcesAsync(
+            context, comprobanteModel, reporteCaja);
 
         // Verificar transacciones pendientes después de cargar recursos
-        if (_pendingTransactionService.hasPreviousDayTransactions(reporteCaja)) {
+        if (_pendingTransactionService
+            .hasPreviousDayTransactions(reporteCaja)) {
           await _pendingTransactionService.showPreviousDayAlert(
             context,
             reporteCaja,
@@ -233,7 +238,8 @@ class _HomeState extends State<Home> {
 
   // ==================== MÉTODOS DE GENERACIÓN DE TICKETS ====================
 
-  Future<void> _generateTicket(String tipo, double valor, bool isCorrespondencia) async {
+  Future<void> _generateTicket(
+      String tipo, double valor, bool isCorrespondencia) async {
     final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
 
     // Verificar transacciones pendientes del día anterior
@@ -275,7 +281,8 @@ class _HomeState extends State<Home> {
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
 
     try {
-      final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
+      final comprobanteModel =
+          Provider.of<ComprobanteModel>(context, listen: false);
 
       await generateTicket.generateTicketPdf(
         context,
@@ -331,9 +338,14 @@ class _HomeState extends State<Home> {
     // Si no es cargo y ya reimpreso, bloqueo
     if (_hasReprinted &&
         _lastTransaction != null &&
-        !_lastTransaction!['nombre'].toString().toLowerCase().contains('cargo')) {
+        !_lastTransaction!['nombre']
+            .toString()
+            .toLowerCase()
+            .contains('cargo')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ya se ha reimpreso este boleto. Genere uno nuevo para reimprimir.')),
+        SnackBar(
+            content: Text(
+                'Ya se ha reimpreso este boleto. Genere uno nuevo para reimprimir.')),
       );
       return;
     }
@@ -347,7 +359,8 @@ class _HomeState extends State<Home> {
     }
 
     // Pedir contraseña
-    bool ok = await showReprintPasswordDialog(context, HomeHelpers.loadPassword);
+    bool ok =
+        await showReprintPasswordDialog(context, HomeHelpers.loadPassword);
     if (!ok) return;
 
     // Cargo → muestro siempre opciones Cliente/Carga/Ambas
@@ -393,7 +406,8 @@ class _HomeState extends State<Home> {
           _lastTransaction,
           _reprintCargoTicket,
         );
-      } else if (nombre == 'Oferta Ruta' || _lastTransaction!['tipo'] == 'ofertaMultiple') {
+      } else if (nombre == 'Oferta Ruta' ||
+          _lastTransaction!['tipo'] == 'ofertaMultiple') {
         await _reprintOfferTicket();
       } else {
         await _reprintRegularTicket();
@@ -418,9 +432,11 @@ class _HomeState extends State<Home> {
 
   Future<void> _reprintOfferTicket() async {
     try {
-      if (_lastTransaction == null || _lastTransaction!['offerEntries'] == null) {
+      if (_lastTransaction == null ||
+          _lastTransaction!['offerEntries'] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No hay suficientes detalles para reimprimir')),
+          SnackBar(
+              content: Text('No hay suficientes detalles para reimprimir')),
         );
         return;
       }
@@ -472,7 +488,8 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _reprintRegularTicket() async {
-    final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
+    final comprobanteModel =
+        Provider.of<ComprobanteModel>(context, listen: false);
 
     String tipo = _lastTransaction!['nombre'] ?? '';
     double valor = _lastTransaction!['valor'] ?? 0.0;
@@ -493,12 +510,14 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _reprintCargoTicket(bool printClient, bool printCargo) async {
-    final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
+    final comprobanteModel =
+        Provider.of<ComprobanteModel>(context, listen: false);
     final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
     final cargoGen = CargoTicketGenerator(comprobanteModel, reporteCaja);
 
     try {
-      final String destinatario = _lastTransaction!['destinatario'] as String? ?? '';
+      final String destinatario =
+          _lastTransaction!['destinatario'] as String? ?? '';
       final String articulo = _lastTransaction!['articulo'] as String? ?? '';
       final double valor = _lastTransaction!['precio'] as double? ?? 0.0;
       final String destino = _lastTransaction!['destino'] as String? ?? '';
@@ -551,8 +570,10 @@ class _HomeState extends State<Home> {
 
     // Asegurar que los recursos estén precargados
     if (!_resourcePreloader.resourcesPreloaded) {
-      final comprobanteModel = Provider.of<ComprobanteModel>(context, listen: false);
-      await _resourcePreloader.preloadPdfResources(context, comprobanteModel, reporteCaja);
+      final comprobanteModel =
+          Provider.of<ComprobanteModel>(context, listen: false);
+      await _resourcePreloader.preloadPdfResources(
+          context, comprobanteModel, reporteCaja);
     }
 
     final decimalFormatter = NumberFormat.decimalPattern('es_CL');
@@ -588,8 +609,10 @@ class _HomeState extends State<Home> {
 
             void setupControllerListeners() {
               for (var entry in offerEntries) {
-                final numberController = entry['numberController'] as TextEditingController?;
-                final valueController = entry['valueController'] as TextEditingController?;
+                final numberController =
+                    entry['numberController'] as TextEditingController?;
+                final valueController =
+                    entry['valueController'] as TextEditingController?;
 
                 if (numberController != null) {
                   numberController.removeListener(() {});
@@ -632,17 +655,20 @@ class _HomeState extends State<Home> {
                   ),
                 );
 
-                final entriesForTicket = offerEntries.map((e) => {
-                  'number': e['numberController'].text,
-                  'value': e['valueController'].text,
-                }).toList();
+                final entriesForTicket = offerEntries
+                    .map((e) => {
+                          'number': e['numberController'].text,
+                          'value': e['valueController'].text,
+                        })
+                    .toList();
 
                 await moTicketGenerator.generateMoTicket(
                   PdfPageFormat.standard,
                   entriesForTicket,
                   _switchValue,
                   context,
-                  (String nombre, double valor, List<double> subtots, String comprobante) {
+                  (String nombre, double valor, List<double> subtots,
+                      String comprobante) {
                     reporteCaja.addOfferEntries(subtots, valor, comprobante);
                     if (!mounted) return;
                     setState(() {
@@ -714,7 +740,8 @@ class _HomeState extends State<Home> {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                            Icon(Icons.warning_amber_rounded,
+                                color: Colors.orange),
                             SizedBox(width: 8),
                             Expanded(
                               child: Column(
@@ -742,14 +769,14 @@ class _HomeState extends State<Home> {
                               style: TextButton.styleFrom(
                                 backgroundColor: Colors.orange.shade100,
                                 foregroundColor: Colors.orange.shade900,
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
                               ),
                               child: Text('Ir a Reportes'),
                             ),
                           ],
                         ),
                       ),
-
                     Expanded(
                       child: ListView.builder(
                         itemCount: offerEntries.length,
@@ -769,7 +796,8 @@ class _HomeState extends State<Home> {
                                   keyboardType: TextInputType.number,
                                   onChanged: (_) {
                                     dialogSetState(() {
-                                      currentTotal = calculateTotal(offerEntries);
+                                      currentTotal =
+                                          calculateTotal(offerEntries);
                                     });
                                   },
                                 ),
@@ -787,18 +815,21 @@ class _HomeState extends State<Home> {
                                   keyboardType: TextInputType.number,
                                   onChanged: (_) {
                                     dialogSetState(() {
-                                      currentTotal = calculateTotal(offerEntries);
+                                      currentTotal =
+                                          calculateTotal(offerEntries);
                                     });
                                   },
                                 ),
                               ),
                               if (offerEntries.length > 1) ...[
                                 IconButton(
-                                  icon: Icon(Icons.remove_circle, color: Colors.red),
+                                  icon: Icon(Icons.remove_circle,
+                                      color: Colors.red),
                                   onPressed: () {
                                     dialogSetState(() {
                                       offerEntries.removeAt(i);
-                                      currentTotal = calculateTotal(offerEntries);
+                                      currentTotal =
+                                          calculateTotal(offerEntries);
                                     });
                                   },
                                 )
@@ -810,7 +841,8 @@ class _HomeState extends State<Home> {
                     ),
                     SizedBox(height: 16),
                     Container(
-                      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      padding:
+                          EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       decoration: BoxDecoration(
                         color: Colors.amber.shade50,
                         borderRadius: BorderRadius.circular(10),
@@ -854,13 +886,18 @@ class _HomeState extends State<Home> {
                                 };
                                 offerEntries.add(newEntry);
 
-                                final newNumberController = newEntry['numberController'] as TextEditingController?;
-                                final newValueController = newEntry['valueController'] as TextEditingController?;
+                                final newNumberController =
+                                    newEntry['numberController']
+                                        as TextEditingController?;
+                                final newValueController =
+                                    newEntry['valueController']
+                                        as TextEditingController?;
 
                                 if (newNumberController != null) {
                                   newNumberController.addListener(() {
                                     dialogSetState(() {
-                                      currentTotal = calculateTotal(offerEntries);
+                                      currentTotal =
+                                          calculateTotal(offerEntries);
                                     });
                                   });
                                 }
@@ -868,7 +905,8 @@ class _HomeState extends State<Home> {
                                 if (newValueController != null) {
                                   newValueController.addListener(() {
                                     dialogSetState(() {
-                                      currentTotal = calculateTotal(offerEntries);
+                                      currentTotal =
+                                          calculateTotal(offerEntries);
                                     });
                                   });
                                 }
@@ -895,7 +933,8 @@ class _HomeState extends State<Home> {
                     else
                       Center(
                         child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.amber.shade800),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.amber.shade800),
                         ),
                       ),
                   ],
@@ -970,74 +1009,103 @@ class _HomeState extends State<Home> {
     final sundayTicketModel = Provider.of<SundayTicketModel>(context);
     final reporteCaja = Provider.of<ReporteCaja>(context);
 
-    List<Map<String, dynamic>> pasajes = _switchValue
-        ? sundayTicketModel.pasajes
-        : ticketModel.pasajes;
+    List<Map<String, dynamic>> pasajes =
+        _switchValue ? sundayTicketModel.pasajes : ticketModel.pasajes;
 
     bool hasPendingDays = reporteCaja.hasPendingOldTransactions();
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: hasPendingDays ? Colors.orange[800] : Colors.amber[800],
-        automaticallyImplyLeading: false,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Slots del AppBar usando el widget modular
-            ...List.generate(_appBarSlots.length, (index) {
-              return HomeAppBarWidgets.buildAppBarSlotWidget(
-                context: context,
-                slot: _appBarSlots[index],
-                currentDay: _currentDay,
-                lastTransaction: _lastTransaction,
-                hasReprinted: _hasReprinted,
-                hasAnulado: _hasAnulado,
-                isReprinting: _isReprinting,
-                getCurrentDate: HomeHelpers.getCurrentDate,
-                onNavigateToSettings: _navigateToSettings,
-                onShowOfferDialog: _showOfferDialog,
-                onShowPasswordDialog: _showPasswordDialog,
-                onHandleReprint: _handleReprint,
-              );
-            }),
-          ],
-        ),
-        titleSpacing: 0,
-      ),
-
-      body: Column(
-        children: [
-          // Banner de advertencia si hay días pendientes
-          if (hasPendingDays)
-            Container(
-              width: double.infinity,
-              color: Colors.red.shade100,
-              padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Hay ${reporteCaja.getOldestPendingDays()} días con ventas sin cerrar',
-                      style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    onPressed: _navigateToReports,
-                    child: Text('Cerrar Caja'),
-                  ),
-                ],
-              ),
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(56),
+        child: AnimatedContainer(
+          duration: Duration(milliseconds: 600),
+          curve: Curves.easeInOut,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: hasPendingDays
+                  ? [Colors.orange.shade800, Colors.red.shade700]
+                  : [Colors.amber.shade700, Colors.amber.shade900],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-
-          // Contenido principal
-          Expanded(
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: (hasPendingDays ? Colors.orange : Colors.amber)
+                    .withValues(alpha: 0.4),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            automaticallyImplyLeading: false,
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Badge de alerta si hay días pendientes
+                if (hasPendingDays)
+                  AnimatedContainer(
+                    duration: Duration(milliseconds: 300),
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade900,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withValues(alpha: 0.5),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.white, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          '${reporteCaja.getOldestPendingDays()}d',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Slots del AppBar usando el widget modular
+                ...List.generate(_appBarSlots.length, (index) {
+                  return HomeAppBarWidgets.buildAppBarSlotWidget(
+                    context: context,
+                    slot: _appBarSlots[index],
+                    currentDay: _currentDay,
+                    lastTransaction: _lastTransaction,
+                    hasReprinted: _hasReprinted,
+                    hasAnulado: _hasAnulado,
+                    isReprinting: _isReprinting,
+                    getCurrentDate: HomeHelpers.getCurrentDate,
+                    onNavigateToSettings: _navigateToSettings,
+                    onShowOfferDialog: _showOfferDialog,
+                    onShowPasswordDialog: _showPasswordDialog,
+                    onHandleReprint: _handleReprint,
+                  );
+                }),
+              ],
+            ),
+            titleSpacing: 0,
+          ),
+        ),
+      ),
+      body: Stack(
+        children: [
+          // Fondo de imagen que cubre toda la pantalla
+          Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
                 image: DecorationImage(
@@ -1047,471 +1115,429 @@ class _HomeState extends State<Home> {
                   fit: BoxFit.cover,
                 ),
               ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10.0, left: 10.0, right: 10.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          height: 50,
-                          width: 150,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(13),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 2,
-                                offset: Offset(0, 1),
-                              ),
-                            ],
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Color(0xFF1900A2),
-                                        borderRadius: BorderRadius.only(
-                                          topLeft: Radius.circular(13),
-                                          bottomLeft: Radius.circular(13),
-                                        ),
+            ),
+          ),
+
+          // Contenido encima del fondo
+          Column(
+            children: [
+              // Espaciador para la AppBar
+              SizedBox(height: 56),
+              // Banner de advertencia si hay días pendientes
+              if (hasPendingDays)
+                Container(
+                  width: double.infinity,
+                  color: Colors.red.shade100,
+                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.red),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Hay ${reporteCaja.getOldestPendingDays()} días con ventas sin cerrar',
+                          style: TextStyle(
+                              color: Colors.red.shade900,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade700,
+                          foregroundColor: Colors.white,
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        onPressed: _navigateToReports,
+                        child: Text('Cerrar Caja'),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Contenido principal
+              Expanded(
+                child: Container(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(
+                            top: 10.0, left: 10.0, right: 10.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TransactionCounterWidget(),
+                            Consumer<ComprobanteModel>(
+                              builder: (context, comprobanteModel, child) {
+                                return Container(
+                                  height: 36,
+                                  width: 100,
+                                  padding: EdgeInsets.symmetric(horizontal: 15),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange,
+                                    borderRadius: BorderRadius.circular(13),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 2,
+                                        offset: Offset(0, 1),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                  Expanded(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Color(0xFFFF0C00),
-                                        borderRadius: BorderRadius.only(
-                                          topRight: Radius.circular(13),
-                                          bottomRight: Radius.circular(13),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Positioned(
-                                left: 13,
-                                child: Consumer<ReporteCaja>(
-                                  builder: (context, reporteCaja, child) {
-                                    DateTime today = DateTime.now();
-                                    String todayDay = DateFormat('dd').format(today);
-                                    String todayMonth = DateFormat('MM').format(today);
-
-                                    var allTransactions = reporteCaja.getOrderedTransactions();
-                                    var todayTransactions = allTransactions.where((t) =>
-                                        t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                            !t['nombre'].toString().startsWith('Anulación:')
-                                    ).toList();
-
-                                    return Text(
-                                      '${todayTransactions.length}',
-                                      style: TextStyle(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.receipt_long,
                                         color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 23,
+                                        size: 20,
                                       ),
-                                      textAlign: TextAlign.center,
-                                    );
-                                  },
-                                ),
-                              ),
-                              Positioned(
-                                right: 13,
-                                child: Consumer<ReporteCaja>(
-                                  builder: (context, reporteCaja, child) {
-                                    DateTime today = DateTime.now();
-                                    String todayDay = DateFormat('dd').format(today);
-                                    String todayMonth = DateFormat('MM').format(today);
-
-                                    var allTransactions = reporteCaja.getOrderedTransactions();
-                                    var todayAnulaciones = allTransactions.where((t) =>
-                                        t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                            t['nombre'].toString().startsWith('Anulación:')
-                                    ).toList();
-
-                                    return Text(
-                                      '${todayAnulaciones.length}',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 23,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    );
-                                  },
-                                ),
-                              ),
-                              Consumer<ReporteCaja>(
-                                builder: (context, reporteCaja, child) {
-                                  DateTime today = DateTime.now();
-                                  String todayDay = DateFormat('dd').format(today);
-                                  String todayMonth = DateFormat('MM').format(today);
-
-                                  var allTransactions = reporteCaja.getOrderedTransactions();
-                                  var todayTransactions = allTransactions.where((t) =>
-                                      t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                          !t['nombre'].toString().startsWith('Anulación:')
-                                  ).toList();
-
-                                  var todayAnulaciones = allTransactions.where((t) =>
-                                      t['dia'] == todayDay && t['mes'] == todayMonth &&
-                                          t['nombre'].toString().startsWith('Anulación:')
-                                  ).toList();
-
-                                  int netCount = todayTransactions.length - todayAnulaciones.length;
-
-                                  return Container(
-                                    width: 60,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.green,
-                                      border: Border.all(color: Colors.white, width: 1.5),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black38,
-                                          blurRadius: 3,
-                                          offset: Offset(0, 5),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        '$netCount',
+                                      SizedBox(width: 5),
+                                      Text(
+                                        '${comprobanteModel.comprobanteNumber}',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 18,
+                                          fontSize: 20,
                                         ),
-                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      Expanded(
+                        child: Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                padding: EdgeInsets.all(8),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    AnimatedSwitcher(
+                                      duration: Duration(milliseconds: 600),
+                                      transitionBuilder: (Widget child,
+                                          Animation<double> animation) {
+                                        return FadeTransition(
+                                          opacity: animation,
+                                          child: ScaleTransition(
+                                            scale: animation,
+                                            child: child,
+                                          ),
+                                        );
+                                      },
+                                      child: Stack(
+                                        key: ValueKey<bool>(_switchValue),
+                                        children: [
+                                          Text(
+                                            _switchValue
+                                                ? 'Domingo/Feriado'
+                                                : 'Lunes a Sábado',
+                                            style: TextStyle(
+                                              fontFamily: 'Hemiheads',
+                                              fontSize: textSize * 1,
+                                              foreground: Paint()
+                                                ..style = PaintingStyle.stroke
+                                                ..strokeWidth = 2
+                                                ..color = Colors.black,
+                                            ),
+                                          ),
+                                          Text(
+                                            _switchValue
+                                                ? 'Domingo/Feriado'
+                                                : 'Lunes a Sábado',
+                                            style: TextStyle(
+                                              fontFamily: 'Hemiheads',
+                                              fontSize: textSize * 1,
+                                              color: _switchValue
+                                                  ? Colors.red
+                                                  : Colors.white,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  );
-                                },
+                                    SizedBox(height: 5),
+                                    Switch(
+                                      value: _switchValue,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _switchValue = value;
+                                        });
+                                      },
+                                      activeThumbColor: Colors.red,
+                                      activeTrackColor:
+                                          Colors.red.withOpacity(0.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                margin: const EdgeInsets.only(right: 16.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (hasPendingDays)
+                                      Container(
+                                        margin: EdgeInsets.only(bottom: 10),
+                                        width: 70,
+                                        height: 30,
+                                        child: ElevatedButton.icon(
+                                          icon: Icon(Icons.warning_amber,
+                                              size: 16),
+                                          label: Text('Cerrar',
+                                              style: TextStyle(fontSize: 10)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red,
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 5),
+                                          ),
+                                          onPressed: _navigateToReports,
+                                        ),
+                                      ),
+                                    Image.asset(
+                                      'assets/logo.png',
+                                      width: 130,
+                                      height: 100,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        Consumer<ComprobanteModel>(
-                          builder: (context, comprobanteModel, child) {
-                            return Container(
-                              height: 36,
-                              width: 100,
-                              padding: EdgeInsets.symmetric(horizontal: 15),
-                              decoration: BoxDecoration(
-                                color: Colors.orange,
-                                borderRadius: BorderRadius.circular(13),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 2,
-                                    offset: Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.receipt_long,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    '${comprobanteModel.comprobanteNumber}',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 20,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                  Expanded(
-                    child: Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      // Primera fila: Público General | Intermedio hasta 50kms
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            padding: EdgeInsets.all(8),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Stack(
-                                  children: [
-                                    Text(
-                                      _switchValue ? 'Domingo/Feriado' : 'Lunes a Sábado',
-                                      style: TextStyle(
-                                        fontFamily: 'Hemiheads',
-                                        fontSize: textSize * 1,
-                                        foreground: Paint()
-                                          ..style = PaintingStyle.stroke
-                                          ..strokeWidth = 2
-                                          ..color = Colors.black,
-                                      ),
-                                    ),
-                                    Text(
-                                      _switchValue ? 'Domingo/Feriado' : 'Lunes a Sábado',
-                                      style: TextStyle(
-                                        fontFamily: 'Hemiheads',
-                                        fontSize: textSize * 1,
-                                        color: _switchValue ? Colors.red : Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 5),
-                                Switch(
-                                  value: _switchValue,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _switchValue = value;
-                                    });
-                                  },
-                                  activeThumbColor: Colors.red,
-                                  activeTrackColor: Colors.red.withOpacity(0.5),
-                                ),
-                              ],
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: pasajes[0]['nombre'],
+                              icon: Icons.people,
+                              backgroundColor:
+                                  _switchValue ? Colors.grey : Colors.red,
+                              borderColor: _switchValue
+                                  ? Colors.blueAccent
+                                  : Colors.black,
+                              onPressed: () {
+                                _generateTicket(pasajes[0]['nombre'],
+                                    pasajes[0]['precio'], false);
+                              },
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
                             ),
                           ),
-
-                          Container(
-                            margin: const EdgeInsets.only(right: 16.0),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (hasPendingDays)
-                                  Container(
-                                    margin: EdgeInsets.only(bottom: 10),
-                                    width: 70,
-                                    height: 30,
-                                    child: ElevatedButton.icon(
-                                      icon: Icon(Icons.warning_amber, size: 16),
-                                      label: Text('Cerrar', style: TextStyle(fontSize: 10)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red,
-                                        padding: EdgeInsets.symmetric(horizontal: 5),
-                                      ),
-                                      onPressed: _navigateToReports,
-                                    ),
-                                  ),
-                                Image.asset(
-                                  'assets/logo.png',
-                                  width: 130,
-                                  height: 100,
-                                  fit: BoxFit.contain,
-                                ),
-                              ],
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: pasajes[4]['nombre'],
+                              icon: Icons.map,
+                              backgroundColor:
+                                  _switchValue ? Colors.red : Colors.green,
+                              borderColor: _switchValue
+                                  ? Colors.pinkAccent
+                                  : Colors.black,
+                              onPressed: () {
+                                _generateTicket(pasajes[4]['nombre'],
+                                    pasajes[4]['precio'], false);
+                              },
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
+                      SizedBox(height: 5),
 
-                  // Primera fila: Público General | Intermedio hasta 50kms
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: pasajes[0]['nombre'],
-                          icon: Icons.people,
-                          backgroundColor: _switchValue ? Colors.grey : Colors.red,
-                          borderColor: _switchValue ? Colors.blueAccent : Colors.black,
-                          onPressed: () {
-                            _generateTicket(pasajes[0]['nombre'], pasajes[0]['precio'], false);
-                          },
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
+                      // Segunda fila: Escolar | Intermedio hasta 15 km
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: pasajes[1]['nombre'],
+                              icon: Icons.school,
+                              backgroundColor:
+                                  _switchValue ? Colors.red : Colors.green,
+                              borderColor: _switchValue
+                                  ? Colors.pinkAccent
+                                  : Colors.black,
+                              onPressed: () {
+                                _generateTicket(pasajes[1]['nombre'],
+                                    pasajes[1]['precio'], false);
+                              },
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
+                            ),
+                          ),
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: pasajes[3]['nombre'],
+                              icon: Icons.directions_bus,
+                              backgroundColor:
+                                  _switchValue ? Colors.red : Colors.blue,
+                              borderColor: _switchValue
+                                  ? Colors.pinkAccent
+                                  : Colors.black,
+                              onPressed: () {
+                                _generateTicket(pasajes[3]['nombre'],
+                                    pasajes[3]['precio'], false);
+                              },
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: pasajes[4]['nombre'],
-                          icon: Icons.map,
-                          backgroundColor: _switchValue ? Colors.red : Colors.green,
-                          borderColor: _switchValue ? Colors.pinkAccent : Colors.black,
-                          onPressed: () {
-                            _generateTicket(pasajes[4]['nombre'], pasajes[4]['precio'], false);
-                          },
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
+                      SizedBox(height: 5),
+
+                      // Tercera fila: Adulto Mayor | Escolar Intermedio
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: pasajes[2]['nombre'],
+                              icon: Icons.elderly,
+                              backgroundColor:
+                                  _switchValue ? Colors.green : Colors.blue,
+                              borderColor: _switchValue
+                                  ? Colors.yellowAccent
+                                  : Colors.black,
+                              onPressed: () {
+                                _generateTicket(pasajes[2]['nombre'],
+                                    pasajes[2]['precio'], false);
+                              },
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
+                            ),
+                          ),
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: pasajes.length > 5
+                                  ? pasajes[5]['nombre']
+                                  : 'Escolar Intermedio',
+                              icon: Icons.school_outlined,
+                              backgroundColor:
+                                  _switchValue ? Colors.white : Colors.white,
+                              borderColor:
+                                  _switchValue ? Colors.black : Colors.black,
+                              textColor: Colors.black,
+                              onPressed: () {
+                                if (pasajes.length > 5) {
+                                  _generateTicket(pasajes[5]['nombre'],
+                                      pasajes[5]['precio'], false);
+                                } else {
+                                  double defaultPrice =
+                                      _switchValue ? 1300.0 : 1000.0;
+                                  _generateTicket('Escolar Intermedio',
+                                      defaultPrice, false);
+                                  print(
+                                      'ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
+                                }
+                              },
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
+                            ),
+                          ),
+                        ],
                       ),
+                      SizedBox(height: 5),
+
+                      // Cuarta fila: Multi Oferta y Cargo
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: 'O F E R T A',
+                              icon: Icons.local_offer,
+                              backgroundColor: hasPendingDays
+                                  ? Colors.grey.shade300
+                                  : Colors.orange,
+                              borderColor: Colors.black,
+                              textColor: Colors.black,
+                              onPressed: _showMultiOfferDialog,
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
+                            ),
+                          ),
+                          SizedBox(
+                            width: (buttonWidth / 2) - 10,
+                            height: buttonHeight,
+                            child: HomeButtons.buildConfigurableButton(
+                              context: context,
+                              text: 'C A R G O',
+                              icon: Icons.inventory,
+                              textColor: Colors.black,
+                              backgroundColor:
+                                  _isButtonDisabled || hasPendingDays
+                                      ? Colors.grey
+                                      : Colors.orange,
+                              borderColor: Colors.black,
+                              onPressed: _showOfferDialog,
+                              showIcons: _showIcons,
+                              textSizeMultiplier: _textSizeMultiplier,
+                              buttonIcons: _buttonIcons,
+                              isDisabled: _isButtonDisabled || hasPendingDays,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 10),
                     ],
                   ),
-                  SizedBox(height: 5),
-
-                  // Segunda fila: Escolar | Intermedio hasta 15 km
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: pasajes[1]['nombre'],
-                          icon: Icons.school,
-                          backgroundColor: _switchValue ? Colors.red : Colors.green,
-                          borderColor: _switchValue ? Colors.pinkAccent : Colors.black,
-                          onPressed: () {
-                            _generateTicket(pasajes[1]['nombre'], pasajes[1]['precio'], false);
-                          },
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
-                      ),
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: pasajes[3]['nombre'],
-                          icon: Icons.directions_bus,
-                          backgroundColor: _switchValue ? Colors.red : Colors.blue,
-                          borderColor: _switchValue ? Colors.pinkAccent : Colors.black,
-                          onPressed: () {
-                            _generateTicket(pasajes[3]['nombre'], pasajes[3]['precio'], false);
-                          },
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 5),
-
-                  // Tercera fila: Adulto Mayor | Escolar Intermedio
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: pasajes[2]['nombre'],
-                          icon: Icons.elderly,
-                          backgroundColor: _switchValue ? Colors.green : Colors.blue,
-                          borderColor: _switchValue ? Colors.yellowAccent : Colors.black,
-                          onPressed: () {
-                            _generateTicket(pasajes[2]['nombre'], pasajes[2]['precio'], false);
-                          },
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
-                      ),
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: pasajes.length > 5 ? pasajes[5]['nombre'] : 'Escolar Intermedio',
-                          icon: Icons.school_outlined,
-                          backgroundColor: _switchValue ? Colors.white : Colors.white,
-                          borderColor: _switchValue ? Colors.black : Colors.black,
-                          textColor: Colors.black,
-                          onPressed: () {
-                            if (pasajes.length > 5) {
-                              _generateTicket(pasajes[5]['nombre'], pasajes[5]['precio'], false);
-                            } else {
-                              double defaultPrice = _switchValue ? 1300.0 : 1000.0;
-                              _generateTicket('Escolar Intermedio', defaultPrice, false);
-                              print('ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
-                            }
-                          },
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 5),
-
-                  // Cuarta fila: Multi Oferta y Cargo
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: 'O F E R T A',
-                          icon: Icons.local_offer,
-                          backgroundColor: hasPendingDays ? Colors.grey.shade300 : Colors.orange,
-                          borderColor: Colors.black,
-                          textColor: Colors.black,
-                          onPressed: _showMultiOfferDialog,
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
-                      ),
-                      SizedBox(
-                        width: (buttonWidth / 2) - 10,
-                        height: buttonHeight,
-                        child: HomeButtons.buildConfigurableButton(
-                          context: context,
-                          text: 'C A R G O',
-                          icon: Icons.inventory,
-                          textColor: Colors.black,
-                          backgroundColor: _isButtonDisabled || hasPendingDays ? Colors.grey : Colors.orange,
-                          borderColor: Colors.black,
-                          onPressed: _showOfferDialog,
-                          showIcons: _showIcons,
-                          textSizeMultiplier: _textSizeMultiplier,
-                          buttonIcons: _buttonIcons,
-                          isDisabled: _isButtonDisabled || hasPendingDays,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 10),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
