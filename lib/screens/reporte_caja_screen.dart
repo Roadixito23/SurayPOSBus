@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart' as printing;
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ReporteCaja.dart';

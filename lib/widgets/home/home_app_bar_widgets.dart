@@ -40,7 +40,7 @@ class HomeAppBarWidgets {
         margin: EdgeInsets.only(left: 20 + leftMargin),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Color(0xFF1900A2),
+          color: Color(0xFF4F8FC0), // primary
         ),
         child: IconButton(
           icon: Icon(
@@ -72,7 +72,7 @@ class HomeAppBarWidgets {
               height: 35,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: canAnular ? Color(0xFFFF0C00) : Colors.white,
+                color: canAnular ? Color(0xFFE57373) : Colors.white, // error
               ),
               child: Material(
                 color: Colors.transparent,
@@ -96,14 +96,10 @@ class HomeAppBarWidgets {
 
     // Reprint button
     else if (elementKey == 'reprint') {
-      // ¿La última transacción es de cargo?
       bool isCargo = lastTransaction != null &&
           lastTransaction['nombre'].toString().toLowerCase().contains('cargo');
-
-      // ¿Podemos reimprimir? — Siempre para cargo, o solo una vez para otros
       bool canReprint =
           lastTransaction != null && !isReprinting && (isCargo || !hasReprinted);
-
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3.0),
         child: Container(
@@ -111,7 +107,7 @@ class HomeAppBarWidgets {
           height: 34,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: canReprint ? Color(0xFFFFD71F) : Colors.white,
+            color: canReprint ? Color(0xFFF2C94C) : Colors.white, // accent
           ),
           child: Material(
             color: Colors.transparent,
@@ -141,7 +137,7 @@ class HomeAppBarWidgets {
           height: 34,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Color(0xFF00910B),
+            color: Color(0xFF6FCF97), // secondary
           ),
           child: Material(
             color: Colors.transparent,

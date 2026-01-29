@@ -145,10 +145,10 @@ class HomeHelpers {
   /// Configura la configuración por defecto del AppBar
   static List<Map<String, dynamic>> setupDefaultAppBarConfig() {
     var slots = List<Map<String, dynamic>>.generate(
-        8, (index) => {'isEmpty': true, 'element': null});
+      8, (index) => {'isEmpty': true, 'element': null});
 
     slots[0] = {'isEmpty': false, 'element': 'report'};
-    slots[1] = {'isEmpty': false, 'element': 'mail'};
+    // slots[1] eliminado: {'isEmpty': false, 'element': 'mail'};
     slots[4] = {'isEmpty': false, 'element': 'delete'};
     slots[5] = {'isEmpty': false, 'element': 'reprint'};
     slots[6] = {'isEmpty': false, 'element': 'settings'};

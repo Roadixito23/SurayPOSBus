@@ -3,16 +3,29 @@ import 'package:flutter/material.dart';
 /// Clase de tema para la aplicación
 class AppTheme {
   // Colores principales
-  static const Color turquoise = Color(0xFF40E0D0);
-  static const Color turquoiseDark = Color(0xFF20B2AA);
-  static const Color turquoiseLight = Color(0xFFAFEEEE);
+  // Nueva paleta moderna y armónica
+  static const Color primary = Color(0xFF4F8FC0); // Azul suave
+  static const Color primaryDark = Color(0xFF395B7F);
+  static const Color primaryLight = Color(0xFFD6E6F6);
 
-  static const Color coral = Color(0xFFFF7F50);
-  static const Color coralDark = Color(0xFFFF6347);
-  static const Color coralLight = Color(0xFFFFA07A);
+  static const Color secondary = Color(0xFF6FCF97); // Verde menta
+  static const Color secondaryDark = Color(0xFF3B7A57);
+  static const Color secondaryLight = Color(0xFFE0F8EC);
 
-  static const Color background = Color(0xFFF5F5F5);
+  static const Color accent = Color(0xFFF2C94C); // Amarillo pastel
+  static const Color accentDark = Color(0xFFC9A13B);
+  static const Color accentLight = Color(0xFFFFF6D6);
+
+  static const Color error = Color(0xFFE57373); // Rojo suave
+  static const Color background = Color(0xFFF8FAFB);
   static const Color cardBackground = Colors.white;
+
+  // Colores adicionales (alias para compatibilidad)
+  static const Color turquoise = Color(0xFF4F8FC0); // Azul turquesa
+  static const Color turquoiseDark = Color(0xFF395B7F); // Azul turquesa oscuro
+  static const Color turquoiseLight = Color(0xFFD6E6F6); // Azul turquesa claro
+  static const Color coral = Color(0xFFE57373); // Coral/Rojo suave
+  static const Color coralLight = Color(0xFFFFCDD2); // Coral claro
 
   // Fuentes
   static const String fontHemiheads = 'Hemiheads';
@@ -23,21 +36,21 @@ class AppTheme {
     fontFamily: fontHemiheads,
     fontSize: 26,
     fontWeight: FontWeight.bold,
-    color: turquoiseDark,
+    color: primaryDark,
   );
 
   static TextStyle get titleMedium => TextStyle(
     fontFamily: fontHemiheads,
     fontSize: 22,
     fontWeight: FontWeight.bold,
-    color: turquoiseDark,
+    color: primaryDark,
   );
 
   static TextStyle get subtitleLarge => TextStyle(
     fontFamily: fontDefault,
     fontSize: 18,
     fontWeight: FontWeight.bold,
-    color: turquoiseDark,
+    color: primaryDark,
   );
 
   static TextStyle get bodyLarge => TextStyle(
@@ -56,7 +69,7 @@ class AppTheme {
     fontFamily: fontDefault,
     fontSize: 16,
     fontWeight: FontWeight.bold,
-    color: coral,
+    color: secondaryDark,
   );
 
   // Decoraciones
@@ -77,7 +90,7 @@ class AppTheme {
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: [
-        turquoiseLight.withOpacity(0.3),
+        primaryLight.withOpacity(0.3),
         Colors.white,
       ],
     ),
@@ -85,15 +98,16 @@ class AppTheme {
 
   // Tema completo de la aplicación
   static ThemeData get lightTheme => ThemeData(
-    primaryColor: turquoise,
+    primaryColor: primary,
     colorScheme: ColorScheme.light(
-      primary: turquoise,
-      secondary: coral,
+      primary: primary,
+      secondary: secondary,
       surface: background,
+      error: error,
     ),
     scaffoldBackgroundColor: background,
     appBarTheme: AppBarTheme(
-      backgroundColor: turquoise,
+      backgroundColor: primary,
       elevation: 0,
       titleTextStyle: TextStyle(
         fontFamily: fontHemiheads,
@@ -105,7 +119,7 @@ class AppTheme {
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: turquoise,
+        backgroundColor: primary,
         foregroundColor: Colors.white,
         elevation: 2,
         shape: RoundedRectangleBorder(
@@ -116,7 +130,7 @@ class AppTheme {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: turquoiseDark,
+        foregroundColor: primaryDark,
       ),
     ),
     cardTheme: CardThemeData(

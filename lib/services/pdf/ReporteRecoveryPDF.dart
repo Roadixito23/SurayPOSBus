@@ -1,7 +1,6 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw; // Importar como 'pw'
 import 'dart:typed_data'; // Para manejar Uint8List
-import 'package:intl/intl.dart'; // Para formatear la fecha
 import 'dart:io'; // Para manejar archivos
 import 'package:path_provider/path_provider.dart'; // Para obtener la ruta del directorio
 import 'package:shared_preferences/shared_preferences.dart'; // Para manejar preferencias compartidas
