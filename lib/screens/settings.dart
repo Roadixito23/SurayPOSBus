@@ -8,6 +8,8 @@ import '../models/sunday_ticket_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'backup_screen.dart';
 import '../models/ComprobanteModelSettings.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager_android.dart';
 
 
 class Settings extends StatefulWidget {
@@ -24,6 +26,10 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   double _textSizeMultiplier = 0.8;
   bool _showIcons = true;
   double _pdfEndMargin = 69.0; // Valor por defecto
+  bool _isNfcAvailable = false;
+  bool _isReadingNfc = false;
+  String _nfcStatus = '';
+  List<String> _linkedNfcCards = [];
 
   Future<bool> _showComprobanteAuthDialog() async {
     final prefs = await SharedPreferences.getInstance();
@@ -208,6 +214,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     _loadButtonIconPreferences();
     _loadAppBarConfig();
     _loadPdfEndMargin(); // Agregar esta línea
+    _checkNfcAvailability();
+    _loadLinkedNfcCards();
     _tabController = TabController(length: 5, vsync: this); // Changed from 4 to 5 tabs
   }
 
@@ -729,7 +737,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
 
   Future<String> _loadPassword() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('password') ?? '232323';
+    return prefs.getString('password') ?? '123456';
   }
 
   Future<void> _savePassword(String newPassword) async {
@@ -790,6 +798,133 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
         ),
       );
     }
+  }
+
+  Future<void> _checkNfcAvailability() async {
+    bool available = await NfcManager.instance.isAvailable();
+    setState(() {
+      _isNfcAvailable = available;
+    });
+  }
+
+  Future<void> _loadLinkedNfcCards() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cardsJson = prefs.getString('linked_nfc_cards') ?? '[]';
+    setState(() {
+      _linkedNfcCards = List<String>.from(json.decode(cardsJson));
+    });
+  }
+
+  Future<void> _saveLinkedNfcCards() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('linked_nfc_cards', json.encode(_linkedNfcCards));
+  }
+
+  Future<void> _startNfcLinking() async {
+    if (!_isNfcAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 10),
+              Text('NFC no está disponible en este dispositivo'),
+            ],
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isReadingNfc = true;
+      _nfcStatus = 'Acerca la tarjeta NFC para vincularla...';
+    });
+
+    try {
+      NfcManager.instance.startSession(
+        pollingOptions: {NfcPollingOption.iso14443},
+        onDiscovered: (NfcTag tag) async {
+          final nfcTag = NfcTagAndroid.from(tag);
+          if (nfcTag != null) {
+            final tagId = nfcTag.id;
+            final tagIdHex = tagId.map((b) => b.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
+            
+            await NfcManager.instance.stopSession();
+            
+            setState(() {
+              _isReadingNfc = false;
+              if (!_linkedNfcCards.contains(tagIdHex)) {
+                _linkedNfcCards.add(tagIdHex);
+                _nfcStatus = 'Tarjeta vinculada: $tagIdHex';
+              } else {
+                _nfcStatus = 'Esta tarjeta ya está vinculada: $tagIdHex';
+              }
+            });
+
+            await _saveLinkedNfcCards();
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Tarjeta NFC vinculada: $tagIdHex')),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+
+            await Future.delayed(const Duration(seconds: 2));
+            setState(() {
+              _nfcStatus = '';
+            });
+          } else {
+            await NfcManager.instance.stopSession();
+            setState(() {
+              _isReadingNfc = false;
+              _nfcStatus = 'No se pudo leer la tarjeta';
+            });
+          }
+        },
+      );
+    } catch (e) {
+      setState(() {
+        _isReadingNfc = false;
+        _nfcStatus = 'Error: $e';
+      });
+    }
+  }
+
+  Future<void> _stopNfcLinking() async {
+    await NfcManager.instance.stopSession();
+    setState(() {
+      _isReadingNfc = false;
+      _nfcStatus = '';
+    });
+  }
+
+  Future<void> _removeNfcCard(String cardId) async {
+    setState(() {
+      _linkedNfcCards.remove(cardId);
+    });
+    await _saveLinkedNfcCards();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 10),
+            Text('Tarjeta NFC desvinculada'),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+      ),
+    );
   }
 
   @override
@@ -1071,6 +1206,81 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     },
                     child: Text('Reiniciar Contador'),
                   ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 20),
+          _buildSectionCard(
+            title: 'Tarjetas NFC Vinculadas',
+            icon: Icons.nfc,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Vincula tarjetas NFC para acceso rápido al sistema',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  SizedBox(height: 16),
+                  if (_nfcStatus.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: backgroundColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: primaryColor.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: primaryColor),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _nfcStatus,
+                              style: TextStyle(fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_nfcStatus.isNotEmpty) SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isReadingNfc ? _stopNfcLinking : _startNfcLinking,
+                          icon: Icon(_isReadingNfc ? Icons.stop : Icons.add),
+                          label: Text(_isReadingNfc ? 'Detener' : 'Vincular Tarjeta'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _isReadingNfc ? Colors.red : buttonColor,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  if (_linkedNfcCards.isEmpty)
+                    Center(
+                      child: Text(
+                        'No hay tarjetas vinculadas',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  else
+                    ..._linkedNfcCards.map((cardId) => Card(
+                      margin: EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Icon(Icons.nfc, color: primaryColor),
+                        title: Text(cardId),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _removeNfcCard(cardId),
+                        ),
+                      ),
+                    )).toList(),
                 ],
               ),
             ),
@@ -1380,7 +1590,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     subtitle: Text(
                         'Muestra íconos junto al texto en los botones'),
                     value: _showIcons,
-                    activeThumbColor: primaryColor,
+                    activeColor: primaryColor,
                     onChanged: (value) {
                       setState(() {
                         _showIcons = value;
@@ -1820,7 +2030,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                   ),
                   Switch(
                     value: elementData['enabled'],
-                    activeThumbColor: primaryColor,
+                    activeColor: primaryColor,
                     onChanged: (value) {
                       setState(() {
                         elementData['enabled'] = value;
@@ -1896,7 +2106,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
             // Switch to enable/disable the element
             Switch(
               value: _appBarElements[key]['enabled'],
-              activeThumbColor: primaryColor,
+              activeColor: primaryColor,
               onChanged: (value) {
                 setState(() {
                   _appBarElements[key]['enabled'] = value;

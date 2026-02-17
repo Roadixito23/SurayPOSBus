@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-import 'package:file_picker/file_picker.dart';
+// import 'package:file_picker/file_picker.dart'; // Eliminado por compatibilidad
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:archive/archive.dart';
@@ -164,52 +164,57 @@ class BackupService {
   }
 
   // Importar respaldo desde almacenamiento externo (para Android)
+  // Función deshabilitada - requiere file_picker que fue removido por compatibilidad
   static Future<File?> importBackup() async {
-    try {
-      // Solicitar permiso de almacenamiento
-      var status = await Permission.storage.status;
-      if (!status.isGranted) {
-        status = await Permission.storage.request();
-        if (!status.isGranted) {
-          return null;
-        }
-      }
+    // try {
+    //   // Solicitar permiso de almacenamiento
+    //   var status = await Permission.storage.status;
+    //   if (!status.isGranted) {
+    //     status = await Permission.storage.request();
+    //     if (!status.isGranted) {
+    //       return null;
+    //     }
+    //   }
 
-      // Usar FileType.any en lugar de FileType.custom con extensiones
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
-      );
+    //   // Usar FileType.any en lugar de FileType.custom con extensiones
+    //   FilePickerResult? result = await FilePicker.platform.pickFiles(
+    //     type: FileType.any,
+    //     allowMultiple: false,
+    //   );
 
-      if (result != null && result.files.single.path != null) {
-        // Obtener la ruta del archivo seleccionado
-        final path = result.files.single.path!;
-        final fileName = path.split('/').last.toLowerCase();
+    //   if (result != null && result.files.single.path != null) {
+    //     // Obtener la ruta del archivo seleccionado
+    //     final path = result.files.single.path!;
+    //     final fileName = path.split('/').last.toLowerCase();
 
-        // Verificar manualmente si el archivo tiene la extensión correcta
-        if (!fileName.endsWith(backupExtension)) {
-          print('Archivo seleccionado no es un respaldo válido: $fileName');
-          return null;
-        }
+    //     // Verificar manualmente si el archivo tiene la extensión correcta
+    //     if (!fileName.endsWith(backupExtension)) {
+    //       print('Archivo seleccionado no es un respaldo válido: $fileName');
+    //       return null;
+    //     }
 
-        // Copiar el archivo al directorio de respaldo de la aplicación
-        final appDocDir = await getApplicationDocumentsDirectory();
-        final backupDir = Directory('${appDocDir.path}/$backupFolder');
-        if (!await backupDir.exists()) {
-          await backupDir.create(recursive: true);
-        }
+    //     // Copiar el archivo al directorio de respaldo de la aplicación
+    //     final appDocDir = await getApplicationDocumentsDirectory();
+    //     final backupDir = Directory('\${appDocDir.path}/$backupFolder');
+    //     if (!await backupDir.exists()) {
+    //       await backupDir.create(recursive: true);
+    //     }
 
-        final targetFile = File('${backupDir.path}/$fileName');
-        await File(path).copy(targetFile.path);
+    //     final targetFile = File('\${backupDir.path}/$fileName');
+    //     await File(path).copy(targetFile.path);
 
-        return targetFile;
-      }
+    //     return targetFile;
+    //   }
 
-      return null;
-    } catch (e) {
-      print('Error al importar respaldo: $e');
-      return null;
-    }
+    //   return null;
+    // } catch (e) {
+    //   print('Error al importar respaldo: $e');
+    //   return null;
+    // }
+    
+    // Funcionalidad deshabilitada
+    print('importBackup deshabilitado - file_picker no disponible');
+    return null;
   }
 
   // Compartir archivo de respaldo

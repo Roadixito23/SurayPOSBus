@@ -8,6 +8,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
 import '../services/report/report_cleaner.dart';
+import '../services/statistics/statistics_service.dart';
 
 class RecoveryReport extends StatefulWidget {
   const RecoveryReport({super.key});
@@ -143,6 +144,117 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
       final fileName = file.path.split('/').last.toLowerCase();
       return fileName.contains(searchQuery.toLowerCase());
     }).toList();
+  }
+
+  // Método para mostrar diálogo de confirmación para eliminar todos los cierres
+  void _showDeleteAllClosingsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Text(
+              'Eliminar Todo',
+              style: TextStyle(
+                fontFamily: AppTheme.fontHemiheads,
+                color: Colors.red.shade700,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '¿Está seguro que desea eliminar TODOS los cierres de caja almacenados?',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.red.shade700, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Esta acción no se puede deshacer. Se eliminarán todos los registros de la base de datos.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            child: Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Eliminar Todo'),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _deleteAllClosings();
+            },
+          ),
+        ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    );
+  }
+
+  // Método para eliminar todos los cierres
+  Future<void> _deleteAllClosings() async {
+    setState(() => isLoading = true);
+    
+    try {
+      final statsService = StatisticsService();
+      final success = await statsService.deleteAllClosings();
+      
+      if (success) {
+        // También eliminar los archivos PDF
+        final directory = await getApplicationDocumentsDirectory();
+        final files = directory.listSync();
+        for (var file in files) {
+          if (file.path.endsWith('.pdf')) {
+            try {
+              await File(file.path).delete();
+            } catch (e) {
+              print('Error al eliminar archivo: ${file.path}');
+            }
+          }
+        }
+        
+        _showSnackBar('Todos los cierres han sido eliminados', Colors.green);
+        await _loadPdfFiles();
+        await _loadReportStatistics();
+      } else {
+        _showSnackBar('Error al eliminar los cierres', AppTheme.coral);
+      }
+    } catch (e) {
+      _showSnackBar('Error: $e', AppTheme.coral);
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
   }
 
   // Método para mostrar SnackBar con estilo personalizado
@@ -418,6 +530,11 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.delete_forever),
+            tooltip: 'Eliminar todos los cierres',
+            onPressed: _showDeleteAllClosingsDialog,
+          ),
           IconButton(
             icon: Icon(Icons.refresh),
             tooltip: 'Actualizar',

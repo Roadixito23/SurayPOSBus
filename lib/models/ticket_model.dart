@@ -6,6 +6,9 @@ class TicketModel extends ChangeNotifier {
   List<Map<String, dynamic>> _pasajes = [];
 
   TicketModel() {
+    // Inicializar inmediatamente con valores por defecto
+    _initializeDefaultTickets();
+    // Cargar datos guardados en segundo plano
     _loadPasajes();
   }
 
@@ -39,11 +42,11 @@ class TicketModel extends ChangeNotifier {
 
       // Asegurar que todos los tickets esenciales existen
       _ensureEssentialTickets();
-    } else {
-      // Valores predeterminados si no hay datos guardados
-      _initializeDefaultTickets();
+      
+      // Solo notificar si hay cambios
+      notifyListeners();
     }
-    notifyListeners();
+    // Si no hay datos guardados, ya tenemos los valores por defecto
   }
 
   // Inicializar con valores predeterminados
@@ -56,7 +59,7 @@ class TicketModel extends ChangeNotifier {
       {'nombre': 'Int. hasta 50 Km', 'precio': 2500.0},
       {'nombre': 'Escolar Intermedio', 'precio': 1000.0}, // Escolar Intermedio como 6º ticket
     ];
-    _savePasajes();
+    // No llamar _savePasajes() aquí para evitar sobrescribir datos guardados
   }
 
   // Asegurar que todos los tickets esenciales existen

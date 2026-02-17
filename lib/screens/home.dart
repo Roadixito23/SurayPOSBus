@@ -1,10 +1,10 @@
-import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'cargo_screen.dart';
 import '../services/pdf/generateCargo_Ticket.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'reporte_caja_screen.dart';
+import 'statistics_screen.dart';
 import '../services/pdf/generateTicket.dart';
 import 'settings.dart';
 import '../models/ReporteCaja.dart';
@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import '../services/pdf/generate_mo_ticket.dart';
 import '../models/ComprobanteModel.dart';
 import '../services/pdf/pdf_optimizer.dart';
+import '../services/closing/auto_closing_service.dart';
 
 // Importar los nuevos módulos
 import '../services/home/pending_transaction_service.dart';
@@ -36,6 +37,9 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  // Key para el Scaffold
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  
   // Servicios
   final PdfOptimizer pdfOptimizer = PdfOptimizer();
   final GenerateTicket generateTicket = GenerateTicket();
@@ -85,15 +89,26 @@ class _HomeState extends State<Home> {
       generateTicket: generateTicket,
     );
 
+    // Inicializar localización de forma asíncrona sin esperar
     _initializeLocalization();
+    
     _updateDay();
     _timer = Timer.periodic(Duration(milliseconds: 250), (timer) {
       _updateDay();
     });
     _isPhoneMode = true;
 
-    // Iniciar precarga de recursos inmediatamente y en segundo plano
+    // Realizar todas las operaciones pesadas en segundo plano después del primer frame
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Cargar preferencias en paralelo
+      await Future.wait([
+        _loadLastTransaction(),
+        _loadDisplayPreferences(),
+        _loadIconSettings(),
+        _loadAppBarConfig(),
+      ]);
+
+      // Luego cargar recursos PDF y verificar transacciones
       try {
         final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
         final comprobanteModel =
@@ -132,11 +147,6 @@ class _HomeState extends State<Home> {
         print('Error en precarga de recursos: $e');
       }
     });
-
-    _loadLastTransaction();
-    _loadDisplayPreferences();
-    _loadIconSettings();
-    _loadAppBarConfig();
   }
 
   @override
@@ -223,6 +233,71 @@ class _HomeState extends State<Home> {
     );
   }
 
+  void _logout() {
+    Navigator.pushReplacementNamed(context, '/');
+  }
+
+  Widget _buildDrawer(BuildContext context) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.amber.shade700, Colors.amber.shade900],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Center(
+                child: Text(
+                  'Suray POS Bus',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: Icon(Icons.assessment, color: Color(0xFF4F8FC0)),
+            title: Text('Cierres de Caja'),
+            onTap: () {
+              Navigator.pop(context);
+              _navigateToReports();
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.bar_chart, color: Colors.green.shade700),
+            title: Text('Estadísticas'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => StatisticsScreen()),
+              );
+            },
+          ),
+          Divider(),
+          ListTile(
+            leading: Icon(Icons.logout, color: Colors.red.shade700),
+            title: Text('Cerrar Sesión'),
+            onTap: () {
+              Navigator.pop(context);
+              _logout();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   void _navigateToSettings() async {
     final settingsChanged = await Navigator.push<bool>(
       context,
@@ -241,8 +316,21 @@ class _HomeState extends State<Home> {
   Future<void> _generateTicket(
       String tipo, double valor, bool isCorrespondencia) async {
     final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
+    final autoClosingService = AutoClosingService();
 
-    // Verificar transacciones pendientes del día anterior
+    // Verificar y realizar auto-cierre si hay cambio de día
+    final didAutoClose = await autoClosingService.checkAndAutoClose(reporteCaja);
+    if (didAutoClose && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Se cerró la caja del día anterior automáticamente'),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // Verificar transacciones pendientes del día anterior (por si no se pudo auto-cerrar)
     if (_pendingTransactionService.hasPreviousDayTransactions(reporteCaja)) {
       await _pendingTransactionService.showPreviousDayAlert(
         context,
@@ -295,6 +383,9 @@ class _HomeState extends State<Home> {
 
       String currentComprobante = comprobanteModel.formattedComprobante;
       reporteCaja.receiveData(tipo, valor, currentComprobante);
+
+      // Actualizar fecha de última transacción
+      await autoClosingService.updateLastTransactionDate();
 
       setState(() {
         _lastTransaction = {
@@ -1015,7 +1106,9 @@ class _HomeState extends State<Home> {
     bool hasPendingDays = reporteCaja.hasPendingOldTransactions();
 
     return Scaffold(
+      key: _scaffoldKey,
       extendBodyBehindAppBar: true,
+      drawer: _buildDrawer(context),
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(56),
         child: AnimatedContainer(
@@ -1033,7 +1126,7 @@ class _HomeState extends State<Home> {
             boxShadow: [
               BoxShadow(
                 color: (hasPendingDays ? Colors.orange : Colors.amber)
-                    .withValues(alpha: 0.4),
+                    .withOpacity(0.4),
                 blurRadius: 8,
                 offset: Offset(0, 4),
               ),
@@ -1056,7 +1149,7 @@ class _HomeState extends State<Home> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.red.withValues(alpha: 0.5),
+                          color: Colors.red.withOpacity(0.5),
                           blurRadius: 6,
                           spreadRadius: 1,
                         ),
@@ -1094,6 +1187,9 @@ class _HomeState extends State<Home> {
                     onShowOfferDialog: _showOfferDialog,
                     onShowPasswordDialog: _showPasswordDialog,
                     onHandleReprint: _handleReprint,
+                    onOpenDrawer: () {
+                      _scaffoldKey.currentState?.openDrawer();
+                    },
                   );
                 }),
               ],
@@ -1122,7 +1218,7 @@ class _HomeState extends State<Home> {
           Column(
             children: [
               // Espaciador para la AppBar
-              SizedBox(height: 56),
+              SizedBox(height:90),
               // Banner de advertencia si hay días pendientes
               if (hasPendingDays)
                 Container(
@@ -1275,7 +1371,7 @@ class _HomeState extends State<Home> {
                                           _switchValue = value;
                                         });
                                       },
-                                      activeThumbColor: Colors.red,
+                                      activeColor: Colors.red,
                                       activeTrackColor:
                                           Colors.red.withOpacity(0.5),
                                     ),

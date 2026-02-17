@@ -53,7 +53,13 @@ class HomeHelpers {
 
   /// Obtiene el día de la semana actual en español
   static String getCurrentDay() {
-    return DateFormat('EEEE', 'es_ES').format(DateTime.now()).toUpperCase();
+    try {
+      return DateFormat('EEEE', 'es_ES').format(DateTime.now()).toUpperCase();
+    } catch (e) {
+      // Fallback si la localización no está inicializada
+      const days = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
+      return days[DateTime.now().weekday - 1];
+    }
   }
 
   /// Verifica si el total de oferta es cero

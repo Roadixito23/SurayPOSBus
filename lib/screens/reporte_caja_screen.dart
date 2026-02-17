@@ -445,7 +445,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
             borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.turquoise.withValues(alpha: 0.3),
+                color: AppTheme.turquoise.withOpacity(0.3),
                 blurRadius: 8,
                 offset: Offset(0, 4),
               ),
@@ -457,7 +457,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                 Container(
                   padding: EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -485,7 +485,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                         '${transactions.length} transacciones',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: Colors.white.withOpacity(0.9),
                           fontWeight: FontWeight.w400,
                         ),
                       ),
@@ -518,7 +518,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: AppTheme.coral.withValues(alpha: 0.5),
+                              color: AppTheme.coral.withOpacity(0.5),
                               blurRadius: 4,
                               spreadRadius: 1,
                             ),
@@ -556,7 +556,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                         child: AppAnimations.pulse(
                           controller: _pulseController,
                           child: Card(
-                            color: AppTheme.coralLight.withValues(alpha: 0.8),
+                            color: AppTheme.coralLight.withOpacity(0.8),
                             elevation: 3,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -903,7 +903,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                                     IconData iconData = Icons.receipt;
 
                                     if (isPastDay) {
-                                      cardColor = AppTheme.coralLight.withValues(alpha: 0.2);
+                                      cardColor = AppTheme.coralLight.withOpacity(0.2);
                                       borderColor = AppTheme.coral;
                                       iconColor = AppTheme.coral;
                                       iconData = Icons.warning_amber_rounded;
@@ -947,7 +947,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                                           ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.1),
+                                              color: Colors.black.withOpacity(0.1),
                                               blurRadius: 4,
                                               offset: Offset(0, 2),
                                             ),

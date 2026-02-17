@@ -19,6 +19,7 @@ class HomeAppBarWidgets {
     required VoidCallback onShowOfferDialog,
     required VoidCallback onShowPasswordDialog,
     required VoidCallback onHandleReprint,
+    required VoidCallback onOpenDrawer,
   }) {
     if (slot['isEmpty'] == true) {
       return Container();
@@ -32,7 +33,7 @@ class HomeAppBarWidgets {
     // Additional margin parameter
     double leftMargin = slot['leftMargin'] ?? 0.0;
 
-    // Report button (usually in slot 0)
+    // Menu button (usually in slot 0) - Opens drawer
     if (elementKey == 'report') {
       return Padding(
         padding: EdgeInsets.only(left: 8 + leftMargin, right: 3),
@@ -47,12 +48,7 @@ class HomeAppBarWidgets {
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-                );
-              },
+              onTap: onOpenDrawer,
               child: Center(
                 child: Icon(
                   Icons.menu,
@@ -173,12 +169,12 @@ class HomeAppBarWidgets {
               Text(
                 getCurrentDate(),
                 style: TextStyle(
-                    color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
+                    color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
               ),
               Text(
                 currentDay,
                 style: TextStyle(
-                    color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
+                    color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
               ),
             ],
           ),

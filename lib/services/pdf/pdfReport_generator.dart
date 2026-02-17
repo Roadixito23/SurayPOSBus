@@ -183,24 +183,29 @@ class PdfReportGenerator {
           return pw.Column(
             children: [
               // Información de la empresa
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  pw.Text(
-                    'Transportes Suray Limitada',
-                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 3),
-                  pw.Text(
-                    '77.799.670-3',
-                    style: pw.TextStyle(fontSize: 11),
-                  ),
-                  pw.SizedBox(height: 2),
-                  pw.Text(
-                    'Eusebio Ibar 630',
-                    style: pw.TextStyle(fontSize: 11),
-                  ),
-                ],
+              pw.Center(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Text(
+                      'Transportes Suray Limitada',
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      '77.799.670-3',
+                      style: pw.TextStyle(fontSize: 11),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'Eusebio Ibar 630',
+                      style: pw.TextStyle(fontSize: 11),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
               pw.SizedBox(height: 5),
 

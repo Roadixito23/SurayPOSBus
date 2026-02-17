@@ -8,7 +8,7 @@ import 'models/ComprobanteModel.dart';
 import 'models/ReporteCaja.dart';
 import 'models/ticket_model.dart';
 import 'models/sunday_ticket_model.dart';
-import 'screens/splash.dart';
+import 'screens/login_screen.dart';
 
 void main() async {
   // Ensure Flutter is initialized
@@ -67,7 +67,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const SteampunkSplashScreen(),
+      home: const LoginScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
