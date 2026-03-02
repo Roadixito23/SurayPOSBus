@@ -8,7 +8,6 @@ import '../models/ReporteCaja.dart';
 import '../services/pdf/pdfReport_generator.dart';
 import '../services/pdf/pdf_optimizer.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_animations.dart';
 import '../services/report/report_cleaner.dart';
 import 'reporte_recovery.dart'; // Import for navigation
 
@@ -24,6 +23,8 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
   bool _isLoading = false;
   String _statusMessage = '';
   bool _showAdminOptions = false;
+  bool _sortNewestFirst = true;
+  int _sortVersion = 0; // incrementar para forzar AnimatedSwitcher
   final TextEditingController _adminPasswordController = TextEditingController();
   final PdfOptimizer pdfOptimizer = PdfOptimizer();
 
@@ -32,6 +33,8 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
   late AnimationController _staggeredController;
   late AnimationController _pulseController;
   late AnimationController _shimmerController;
+  late AnimationController _sortIconController;
+  late Animation<double> _sortIconTurns;
 
   @override
   void initState() {
@@ -58,6 +61,16 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
       duration: Duration(milliseconds: 1500),
     );
 
+    _sortIconController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _sortIconTurns = Tween<double>(begin: 0.0, end: 0.5)
+        .animate(CurvedAnimation(
+          parent: _sortIconController,
+          curve: Curves.easeInOut,
+        ));
+
     // Iniciar las animaciones
     _fadeController.forward();
     _staggeredController.forward();
@@ -75,6 +88,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     _staggeredController.dispose();
     _pulseController.dispose();
     _shimmerController.dispose();
+    _sortIconController.dispose();
     super.dispose();
   }
 
@@ -421,661 +435,584 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     );
   }
 
+  // ─── Widgets auxiliares ───────────────────────────────────────────────────
+
+  Widget _buildAlertBanner(int oldestPendingDays) {
+    return Material(
+      color: AppTheme.coral,
+      child: InkWell(
+        onTap: _showAdminOptions ? _forceCloseOldTransactions : _showAdminAuthDialog,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Cajas pendientes · $oldestPendingDays días de antigüedad',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminSection() {
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.admin_panel_settings,
+                    color: AppTheme.turquoiseDark, size: 17),
+                const SizedBox(width: 6),
+                const Text(
+                  'Administrador',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontHemiheads,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.turquoiseDark,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => setState(() => _showAdminOptions = false),
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    foregroundColor: Colors.grey,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Salir', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.warning_amber_rounded, size: 15),
+                    label: const Text('Cerrar Pendientes',
+                        style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.coral,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: _forceCloseOldTransactions,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.cleaning_services, size: 15),
+                    label: const Text('Limpiar Reportes',
+                        style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.turquoise,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: _cleanOldReportsManually,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(
+      List<Map<String, dynamic>> transactions, double total) {
+    return Card(
+      elevation: 3,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            // Contador de transacciones
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${transactions.length}',
+                    style: const TextStyle(
+                      fontFamily: AppTheme.fontHemiheads,
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.turquoiseDark,
+                    ),
+                  ),
+                  Text(
+                    'Transacciones',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            Container(width: 1, height: 44, color: Colors.grey.shade200),
+            // Total
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '\$${NumberFormat('#,##0', 'es_ES').format(total)}',
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontHemiheads,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.coral,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Total',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransactionsList(List<Map<String, dynamic>> transactions) {
+    // Aplicar el orden seleccionado
+    final sorted = List<Map<String, dynamic>>.from(transactions);
+    if (_sortNewestFirst) {
+      sorted.sort((a, b) {
+        final aId = (a['id'] ?? 0) as int;
+        final bId = (b['id'] ?? 0) as int;
+        return bId.compareTo(aId);
+      });
+    } else {
+      sorted.sort((a, b) {
+        final aId = (a['id'] ?? 0) as int;
+        final bId = (b['id'] ?? 0) as int;
+        return aId.compareTo(bId);
+      });
+    }
+
+    return Card(
+      elevation: 3,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_rounded,
+                    color: AppTheme.turquoiseDark, size: 17),
+                const SizedBox(width: 6),
+                const Text(
+                  'Transacciones',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontHemiheads,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.turquoiseDark,
+                  ),
+                ),
+                const Spacer(),
+                if (transactions.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      // Animar el ícono
+                      if (_sortIconController.status == AnimationStatus.dismissed ||
+                          _sortIconController.status == AnimationStatus.reverse) {
+                        _sortIconController.forward();
+                      } else {
+                        _sortIconController.reverse();
+                      }
+                      setState(() {
+                        _sortNewestFirst = !_sortNewestFirst;
+                        _sortVersion++;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.turquoiseLight,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          RotationTransition(
+                            turns: _sortIconTurns,
+                            child: Icon(
+                              _sortNewestFirst
+                                  ? Icons.arrow_downward_rounded
+                                  : Icons.arrow_upward_rounded,
+                              size: 14,
+                              color: AppTheme.turquoiseDark,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _sortNewestFirst ? 'Más nuevo' : 'Más antiguo',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.turquoiseDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const Divider(height: 14),
+            if (transactions.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 22),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.receipt_long,
+                          size: 40, color: Colors.grey.shade400),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No hay transacciones registradas',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) {
+                  final offset = _sortNewestFirst
+                      ? const Offset(0, -0.06)
+                      : const Offset(0, 0.06);
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                            begin: offset, end: Offset.zero)
+                        .animate(animation),
+                    child: FadeTransition(opacity: animation, child: child),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey(_sortVersion),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: sorted.length,
+                    itemBuilder: (context, index) {
+                      final transaction = sorted[index];
+                  final bool isAnulacion = transaction['nombre']
+                      .toString()
+                      .startsWith('Anulación:');
+                  final today = DateTime.now();
+                  final todayDay = DateFormat('dd').format(today);
+                  final todayMonth = DateFormat('MM').format(today);
+                  final transDay = transaction['dia'];
+                  final transMonth = transaction['mes'];
+                  final isPastDay =
+                      transDay != todayDay || transMonth != todayMonth;
+
+                  Color leftBarColor = AppTheme.turquoise;
+                  Color iconColor = AppTheme.turquoise;
+                  IconData iconData = Icons.receipt_rounded;
+                  Color bgColor = Colors.white;
+
+                  if (isPastDay) {
+                    leftBarColor = AppTheme.coral;
+                    iconColor = AppTheme.coral;
+                    iconData = Icons.warning_amber_rounded;
+                    bgColor = AppTheme.coralLight.withOpacity(0.15);
+                  } else if (isAnulacion) {
+                    leftBarColor = Colors.red.shade400;
+                    iconColor = Colors.red.shade400;
+                    iconData = Icons.do_disturb_rounded;
+                    bgColor = Colors.red.shade50;
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.symmetric(vertical: 3),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border(
+                        left: BorderSide(color: leftBarColor, width: 3),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: iconColor.withOpacity(0.14),
+                              shape: BoxShape.circle,
+                            ),
+                            child:
+                                Icon(iconData, color: iconColor, size: 15),
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  transaction['nombre'],
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: isPastDay
+                                        ? AppTheme.coral
+                                        : Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${transaction['dia']}/${transaction['mes']} ${transaction['hora']}  ·  ${transaction['comprobante'] ?? 'N/A'}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '\$${NumberFormat('#,##0', 'es_ES').format(transaction['valor'])}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isAnulacion
+                                  ? Colors.red.shade600
+                                  : AppTheme.turquoiseDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomActionBar(List<Map<String, dynamic>> transactions) {
+    final bool isEmpty = transactions.isEmpty;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          width: double.infinity,
+          height: 46,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.print_rounded, size: 19),
+            label: const Text(
+              'Cerrar Caja e Imprimir',
+              style: TextStyle(
+                fontFamily: AppTheme.fontHemiheads,
+                fontSize: 15,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  isEmpty ? Colors.grey.shade400 : AppTheme.turquoise,
+              foregroundColor: Colors.white,
+              elevation: isEmpty ? 0 : 3,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: isEmpty ? null : () => _generateReport(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final reporteCaja = Provider.of<ReporteCaja>(context);
     final transactions = reporteCaja.getOrderedTransactions();
     final total = reporteCaja.getTotal();
-
-    // Alerta si hay transacciones antiguas pendientes
     final hasOldTransactions = reporteCaja.hasPendingOldTransactions();
     final oldestPendingDays = reporteCaja.getOldestPendingDays();
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(56),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppTheme.turquoise, AppTheme.turquoiseDark],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.turquoise.withOpacity(0.3),
-                blurRadius: 8,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: AppBar(
-            title: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.assessment_rounded,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Reporte de Caja',
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontHemiheads,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (transactions.isNotEmpty)
-                      Text(
-                        '${transactions.length} transacciones',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.9),
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            actions: [
-              // Badge con notificación de transacciones pendientes
-              Stack(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.history_rounded, color: Colors.white),
-                    onPressed: _navigateToOldReports,
-                    tooltip: 'Reportes Antiguos',
-                  ),
-                  if (hasOldTransactions)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: AnimatedContainer(
-                        duration: Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: AppTheme.coral,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.coral.withOpacity(0.5),
-                              blurRadius: 4,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              SizedBox(width: 8),
-            ],
+      backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        title: const Text(
+          'Reporte de Caja',
+          style: TextStyle(
+            fontFamily: AppTheme.fontHemiheads,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            color: Colors.white,
           ),
         ),
+        backgroundColor: AppTheme.turquoise,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.history_rounded, color: Colors.white),
+                onPressed: _navigateToOldReports,
+                tooltip: 'Reportes Anteriores',
+              ),
+              if (hasOldTransactions)
+                Positioned(
+                  right: 9,
+                  top: 11,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: AppTheme.coral,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
       body: Stack(
         children: [
-          Container(
-            decoration: AppTheme.gradientBackground,
-            child: RefreshIndicator(
-              onRefresh: () async {
-                // Simplemente actualiza la vista
-                setState(() {});
-              },
-              color: AppTheme.turquoise,
-              child: SingleChildScrollView(
-                physics: AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.only(top: 72, left: 16, right: 16, bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Alerta de transacciones antiguas pendientes
-                    if (hasOldTransactions)
-                      FadeTransition(
-                        opacity: _fadeController,
-                        child: AppAnimations.pulse(
-                          controller: _pulseController,
-                          child: Card(
-                            color: AppTheme.coralLight.withOpacity(0.8),
-                            elevation: 3,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Padding(
-                              padding: EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.warning_amber_rounded, color: Colors.white, size: 28),
-                                  SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Cajas pendientes de cierre',
-                                          style: TextStyle(
-                                            fontFamily: AppTheme.fontHemiheads,
-                                            fontSize: 16,
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        SizedBox(height: 4),
-                                        Text(
-                                          'Hay transacciones con $oldestPendingDays días de antigüedad que requieren cierre.',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(Icons.arrow_forward, color: Colors.white),
-                                    onPressed: _showAdminOptions ? _forceCloseOldTransactions : _showAdminAuthDialog,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+          Column(
+            children: [
+              // Banner de alerta compacto
+              if (hasOldTransactions) _buildAlertBanner(oldestPendingDays),
 
-                    if (hasOldTransactions)
-                      SizedBox(height: 16),
-
-                    // Sección de Admin (visible solo con autenticación)
-                    if (_showAdminOptions)
-                      AnimatedBuilder(
-                        animation: _staggeredController,
-                        builder: (context, child) {
-                          return AppAnimations.fadeInUp(
-                            animation: _staggeredController,
-                            child: child!,
-                          );
-                        },
-                        child: Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          color: Colors.white,
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.admin_panel_settings, color: AppTheme.turquoiseDark),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Opciones de Administrador',
-                                      style: TextStyle(
-                                        fontFamily: AppTheme.fontHemiheads,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.turquoiseDark,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 12),
-                                Text(
-                                  'Utilice estas funciones con precaución:',
-                                  style: TextStyle(
-                                    color: AppTheme.turquoiseDark,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(height: 16),
-                                ElevatedButton.icon(
-                                  icon: Icon(Icons.warning_amber_rounded),
-                                  label: Text('Cerrar Cajas Pendientes'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.coral,
-                                    foregroundColor: Colors.white,
-                                    padding: EdgeInsets.symmetric(vertical: 12),
-                                    elevation: 2,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onPressed: _forceCloseOldTransactions,
-                                ),
-                                SizedBox(height: 8),
-                                ElevatedButton.icon(
-                                  icon: Icon(Icons.cleaning_services),
-                                  label: Text('Limpiar Reportes Antiguos'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.turquoise,
-                                    foregroundColor: Colors.white,
-                                    padding: EdgeInsets.symmetric(vertical: 12),
-                                    elevation: 2,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onPressed: _cleanOldReportsManually,
-                                ),
-                                SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton.icon(
-                                      icon: Icon(Icons.logout),
-                                      label: Text('Salir de Administrador'),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.grey[700],
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _showAdminOptions = false;
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    if (_showAdminOptions)
-                      SizedBox(height: 16),
-
-                    SizedBox(height: 16),
-
-                    // Información del Reporte
-                    AnimatedBuilder(
-                      animation: _staggeredController,
-                      builder: (context, child) {
-                        return AppAnimations.fadeInUp(
-                          animation: _staggeredController,
-                          yOffset: 40.0,
-                          child: child!,
-                        );
-                      },
-                      child: Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Información del Reporte',
-                                style: TextStyle(
-                                  fontFamily: AppTheme.fontHemiheads,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.turquoiseDark,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Divider(),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Total de Transacciones:',
-                                    style: TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.turquoiseLight,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${transactions.length}',
-                                      style: TextStyle(
-                                        fontFamily: AppTheme.fontHemiheads,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.turquoiseDark,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Total:',
-                                    style: TextStyle(
-                                      fontFamily: AppTheme.fontHemiheads,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                      color: AppTheme.turquoiseDark,
-                                    ),
-                                  ),
-                                  Text(
-                                    '\$${NumberFormat('#,##0', 'es_ES').format(total)}',
-                                    style: TextStyle(
-                                      fontFamily: AppTheme.fontHemiheads,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 22,
-                                      color: AppTheme.coral,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 20),
-                              ElevatedButton.icon(
-                                icon: Icon(Icons.print),
-                                label: Text(
-                                  'Cerrar Caja e Imprimir',
-                                  style: TextStyle(
-                                    fontFamily: AppTheme.fontHemiheads,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: transactions.isEmpty ? Colors.grey : AppTheme.turquoise,
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.symmetric(vertical: 14),
-                                  elevation: 3,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                ),
-                                onPressed: transactions.isEmpty
-                                    ? null
-                                    : () => _generateReport(context),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+              // Contenido desplazable
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async => setState(() {}),
+                  color: AppTheme.turquoise,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_showAdminOptions) ...[
+                          _buildAdminSection(),
+                          const SizedBox(height: 10),
+                        ],
+                        _buildSummaryCard(transactions, total),
+                        const SizedBox(height: 10),
+                        _buildTransactionsList(transactions),
+                        const SizedBox(height: 6),
+                      ],
                     ),
-
-                    SizedBox(height: 16),
-
-                    // Lista de Transacciones
-                    AnimatedBuilder(
-                      animation: _staggeredController,
-                      builder: (context, child) {
-                        return AppAnimations.fadeInUp(
-                          animation: _staggeredController,
-                          yOffset: 50.0,
-                          child: child!,
-                        );
-                      },
-                      child: Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.receipt, color: AppTheme.turquoiseDark),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Transacciones',
-                                    style: TextStyle(
-                                      fontFamily: AppTheme.fontHemiheads,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.turquoiseDark,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 8),
-                              Divider(),
-                              if (transactions.isEmpty)
-                                Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 30),
-                                  child: Center(
-                                    child: Column(
-                                      children: [
-                                        Icon(
-                                          Icons.receipt_long,
-                                          size: 48,
-                                          color: Colors.grey.shade400,
-                                        ),
-                                        SizedBox(height: 16),
-                                        Text(
-                                          'No hay transacciones registradas',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.grey.shade600,
-                                            fontStyle: FontStyle.italic,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              else
-                                ListView.builder(
-                                  shrinkWrap: true,
-                                  physics: NeverScrollableScrollPhysics(),
-                                  itemCount: transactions.length,
-                                  itemBuilder: (context, index) {
-                                    final transaction = transactions[index];
-                                    final bool isAnulacion = transaction['nombre'].toString().startsWith('Anulación:');
-
-                                    // Verificar si es una transacción de día anterior
-                                    final today = DateTime.now();
-                                    final todayDay = DateFormat('dd').format(today);
-                                    final todayMonth = DateFormat('MM').format(today);
-
-                                    final transDay = transaction['dia'];
-                                    final transMonth = transaction['mes'];
-                                    final isPastDay = transDay != todayDay || transMonth != todayMonth;
-
-                                    Color cardColor = Colors.white;
-                                    Color borderColor = Colors.grey.shade300;
-                                    Color iconColor = AppTheme.turquoise;
-                                    IconData iconData = Icons.receipt;
-
-                                    if (isPastDay) {
-                                      cardColor = AppTheme.coralLight.withOpacity(0.2);
-                                      borderColor = AppTheme.coral;
-                                      iconColor = AppTheme.coral;
-                                      iconData = Icons.warning_amber_rounded;
-                                    } else if (isAnulacion) {
-                                      cardColor = Colors.red.shade50;
-                                      borderColor = Colors.red.shade300;
-                                      iconColor = Colors.red;
-                                      iconData = Icons.do_disturb;
-                                    }
-
-                                    return AnimatedBuilder(
-                                      animation: _staggeredController,
-                                      builder: (context, child) {
-                                        final int staggeredIndex = index % 10; // Repetir animación cada 10 elementos
-                                        final double interval = 0.05 * staggeredIndex;
-
-                                        final Animation<double> animation = CurvedAnimation(
-                                          parent: _staggeredController,
-                                          curve: Interval(
-                                            0.5 + interval, // Empezar después de que las tarjetas principales aparezcan
-                                            1.0,
-                                            curve: Curves.easeOutQuart,
-                                          ),
-                                        );
-
-                                        return AppAnimations.fadeInRight(
-                                          animation: animation,
-                                          child: child!,
-                                        );
-                                      },
-                                      child: AnimatedContainer(
-                                        duration: Duration(milliseconds: 600),
-                                        curve: Curves.easeInOut,
-                                        margin: EdgeInsets.symmetric(vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: cardColor,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: borderColor,
-                                            width: 1,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.1),
-                                              blurRadius: 4,
-                                              offset: Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: ListTile(
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          leading: AnimatedContainer(
-                                            duration: Duration(milliseconds: 600),
-                                            curve: Curves.easeInOut,
-                                            width: 40,
-                                            height: 40,
-                                            decoration: BoxDecoration(
-                                              color: iconColor,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Icon(
-                                              iconData,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          title: Text(
-                                            transaction['nombre'],
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: isPastDay ? AppTheme.coral : null,
-                                            ),
-                                          ),
-                                          subtitle: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              SizedBox(height: 4),
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.receipt_long,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  SizedBox(width: 4),
-                                                  Text(
-                                                    '${transaction['comprobante'] ?? 'N/A'}',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              SizedBox(height: 2),
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.calendar_today,
-                                                    size: 14,
-                                                    color: isPastDay ? AppTheme.coral : Colors.grey,
-                                                  ),
-                                                  SizedBox(width: 4),
-                                                  Text(
-                                                    '${transaction['dia']}/${transaction['mes']} - ${transaction['hora']}',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontStyle: isPastDay ? FontStyle.italic : null,
-                                                      color: isPastDay ? AppTheme.coral : null,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                          trailing: AnimatedContainer(
-                                            duration: Duration(milliseconds: 600),
-                                            curve: Curves.easeInOut,
-                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: isAnulacion
-                                                  ? Colors.red.shade100
-                                                  : AppTheme.turquoiseLight,
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              '\$${NumberFormat('#,##0', 'es_ES').format(transaction['valor'])}',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: isAnulacion ? Colors.red : AppTheme.turquoiseDark,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 24),
-                  ],
+                  ),
                 ),
               ),
-            ),
+
+              // Barra de acción fija inferior
+              _buildBottomActionBar(transactions),
+            ],
           ),
 
-          // Indicador de carga
+          // Overlay de carga
           if (_isLoading)
             Container(
               color: Colors.black54,
               child: Center(
                 child: Card(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                      borderRadius: BorderRadius.circular(16)),
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(22),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.turquoise),
+                        const CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              AppTheme.turquoise),
                         ),
-                        SizedBox(height: 20),
+                        const SizedBox(height: 16),
                         Text(
                           _statusMessage,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontFamily: AppTheme.fontHemiheads,
                             fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                            fontSize: 14,
                           ),
                           textAlign: TextAlign.center,
                         ),

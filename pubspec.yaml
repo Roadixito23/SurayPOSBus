@@ -1,7 +1,7 @@
 name: untitled3
-description: "20.05.25"
+description: "V.02.03.26"
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-version: 01.05.25
+version: 02.03.26
 
 environment:
   sdk: '>=3.6.0 <4.0.0'

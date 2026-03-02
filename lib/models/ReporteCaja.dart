@@ -1,9 +1,56 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class ReporteCaja extends ChangeNotifier {
   final List<Map<String, dynamic>> _transactions = [];
   int _nextId = 1;
+
+  static const String _prefsKey = 'reporte_caja_transactions';
+  static const String _prefsNextIdKey = 'reporte_caja_next_id';
+
+  ReporteCaja() {
+    _loadFromPrefs();
+  }
+
+  // ── Persistencia ──────────────────────────────────────────────────────────
+
+  Future<void> _loadFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? data = prefs.getString(_prefsKey);
+      final int? savedNextId = prefs.getInt(_prefsNextIdKey);
+
+      if (data != null) {
+        final List<dynamic> decoded = json.decode(data);
+        _transactions.clear();
+        _transactions.addAll(decoded.cast<Map<String, dynamic>>());
+      }
+      if (savedNextId != null) {
+        _nextId = savedNextId;
+      } else if (_transactions.isNotEmpty) {
+        // Recalcular nextId desde los datos cargados
+        _nextId = _transactions
+                .map((t) => (t['id'] as int?) ?? 0)
+                .reduce((a, b) => a > b ? a : b) +
+            1;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error cargando transacciones: $e');
+    }
+  }
+
+  Future<void> _saveToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKey, json.encode(_transactions));
+      await prefs.setInt(_prefsNextIdKey, _nextId);
+    } catch (e) {
+      debugPrint('Error guardando transacciones: $e');
+    }
+  }
 
   // Nueva clase de transacción para guardar correctamente los datos por día
   Map<String, dynamic> _createTransaction(String nombre, double valor, String comprobante) {
@@ -31,18 +78,21 @@ class ReporteCaja extends ChangeNotifier {
   void receiveData(String nombre, double valor, String comprobante) {
     _transactions.add(_createTransaction(nombre, valor, comprobante));
     notifyListeners();
+    _saveToPrefs();
   }
 
   // Recibir datos de cargo (para tickets de cargo)
   void receiveCargoData(String destinatario, double precio, String comprobante) {
     _transactions.add(_createTransaction('Cargo: $destinatario', precio, comprobante));
     notifyListeners();
+    _saveToPrefs();
   }
 
   // Añadir entradas de oferta (para tickets de oferta múltiple)
   void addOfferEntries(List<double> subtotals, double total, String comprobante) {
     _transactions.add(_createTransaction('Oferta Ruta', total, comprobante));
     notifyListeners();
+    _saveToPrefs();
   }
 
   // Cancelar última transacción
@@ -66,6 +116,7 @@ class ReporteCaja extends ChangeNotifier {
 
       _transactions.add(_createTransaction(nombre, valor, comprobante));
       notifyListeners();
+      _saveToPrefs();
     }
   }
 
@@ -81,6 +132,7 @@ class ReporteCaja extends ChangeNotifier {
   void removeTransaction(int id) {
     _transactions.removeWhere((t) => t['id'] == id);
     notifyListeners();
+    _saveToPrefs();
   }
 
   // Calcular el total considerando anulaciones
@@ -98,7 +150,9 @@ class ReporteCaja extends ChangeNotifier {
   // Vaciar todas las transacciones
   void clearTransactions() {
     _transactions.clear();
+    _nextId = 1;
     notifyListeners();
+    _saveToPrefs();
   }
 
   // NUEVO: Obtener transacciones por fecha

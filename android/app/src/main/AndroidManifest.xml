@@ -20,7 +20,7 @@
     </queries>
 
     <application
-        android:label="V.20.05.25"
+        android:label="V.02.03.26"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">

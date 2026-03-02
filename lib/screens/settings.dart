@@ -29,6 +29,9 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   bool _isNfcAvailable = false;
   bool _isReadingNfc = false;
   String _nfcStatus = '';
+  // NFC para autenticación de acceso a configuración
+  bool _isNfcAuthReading = false;
+  String _nfcAuthStatus = '';
   List<String> _linkedNfcCards = [];
 
   Future<bool> _showComprobanteAuthDialog() async {
@@ -178,7 +181,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   // Flag to track if settings have changed
   bool _settingsChanged = false;
 
-  final String appVersion = '20.05.25';
+  final String appVersion = 'V.02.03.26';
 
   // Variables para TabController
   late TabController _tabController;
@@ -221,13 +224,15 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    if (_isNfcAuthReading) {
+      NfcManager.instance.stopSession();
+    }
     _tabController.dispose();
     passwordController.dispose();
     idController.dispose();
     for (var controller in _abbreviationControllers.values) {
       controller.dispose();
     }
-
     super.dispose();
   }
   IconData _getIconFromString(String iconName) {
@@ -805,6 +810,10 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     setState(() {
       _isNfcAvailable = available;
     });
+    // Auto-iniciar lectura NFC para autenticación si aún no está autenticado
+    if (available && !isAuthenticated) {
+      _startNfcAuthReading();
+    }
   }
 
   Future<void> _loadLinkedNfcCards() async {
@@ -907,6 +916,91 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     });
   }
 
+  // ── NFC Autenticación de acceso ────────────────────────────────────────────
+
+  Future<void> _startNfcAuthReading() async {
+    if (!_isNfcAvailable || _isNfcAuthReading) return;
+    if (mounted) {
+      setState(() {
+        _isNfcAuthReading = true;
+        _nfcAuthStatus = 'Acerca la tarjeta NFC...';
+      });
+    }
+    try {
+      NfcManager.instance.startSession(
+        pollingOptions: {NfcPollingOption.iso14443},
+        onDiscovered: (NfcTag tag) async {
+          final nfcTag = NfcTagAndroid.from(tag);
+          if (nfcTag != null) {
+            final tagId = nfcTag.id;
+            final tagIdHex = tagId
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join(':')
+                .toUpperCase();
+            // Cargar tarjetas autorizadas desde SharedPreferences
+            final prefs = await SharedPreferences.getInstance();
+            final cardsJson = prefs.getString('linked_nfc_cards') ?? '[]';
+            final List<String> authorizedIds =
+                List<String>.from(json.decode(cardsJson));
+            final bool isAuthorized =
+                authorizedIds.isEmpty || authorizedIds.contains(tagIdHex);
+            if (isAuthorized) {
+              await NfcManager.instance.stopSession();
+              if (mounted) {
+                setState(() {
+                  _isNfcAuthReading = false;
+                  _nfcAuthStatus = '';
+                  isAuthenticated = true;
+                });
+                _loadId();
+              }
+            } else {
+              if (mounted) {
+                setState(() {
+                  _nfcAuthStatus = 'Tarjeta no autorizada';
+                });
+              }
+              await Future.delayed(const Duration(seconds: 2));
+              await NfcManager.instance.stopSession();
+              if (mounted) {
+                setState(() {
+                  _isNfcAuthReading = false;
+                  _nfcAuthStatus = '';
+                });
+                _startNfcAuthReading();
+              }
+            }
+          } else {
+            await NfcManager.instance.stopSession();
+            if (mounted) {
+              setState(() {
+                _isNfcAuthReading = false;
+                _nfcAuthStatus = 'No se pudo leer la tarjeta';
+              });
+            }
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isNfcAuthReading = false;
+          _nfcAuthStatus = 'Error NFC: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _stopNfcAuthReading() async {
+    await NfcManager.instance.stopSession();
+    if (mounted) {
+      setState(() {
+        _isNfcAuthReading = false;
+        _nfcAuthStatus = '';
+      });
+    }
+  }
+
   Future<void> _removeNfcCard(String cardId) async {
     setState(() {
       _linkedNfcCards.remove(cardId);
@@ -946,6 +1040,18 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
           elevation: 0,
           centerTitle: true,
           actions: [
+            if (!isAuthenticated && _isNfcAvailable)
+              IconButton(
+                icon: Icon(
+                  _isNfcAuthReading ? Icons.nfc : Icons.nfc_outlined,
+                ),
+                tooltip: _isNfcAuthReading
+                    ? 'Detener lectura NFC'
+                    : 'Leer tarjeta NFC',
+                onPressed: _isNfcAuthReading
+                    ? _stopNfcAuthReading
+                    : _startNfcAuthReading,
+              ),
             if (isAuthenticated)
               IconButton(
                 icon: Icon(Icons.logout),
@@ -955,6 +1061,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     isAuthenticated = false;
                     passwordController.clear();
                   });
+                  // Reiniciar lectura NFC de autenticación
+                  if (_isNfcAvailable) _startNfcAuthReading();
                 },
               ),
           ],
@@ -984,73 +1092,175 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
         ),
       ),
       child: Center(
-        child: Card(
-          margin: EdgeInsets.all(20),
-          elevation: 10,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.security,
-                  size: 60,
-                  color: primaryColor,
-                ),
-                SizedBox(height: 20),
-                Text(
-                  'Ingrese la Contraseña',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Card(
+            elevation: 10,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.security,
+                    size: 60,
+                    color: primaryColor,
                   ),
-                ),
-                SizedBox(height: 20),
-                TextField(
-                  controller: passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Contraseña (6 dígitos)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    prefixIcon: Icon(Icons.password, color: primaryColor),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: primaryColor, width: 2),
+                  SizedBox(height: 20),
+                  Text(
+                    'Ingrese la Contraseña',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
                     ),
                   ),
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18, letterSpacing: 8),
-                ),
-                SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _authenticate,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      shape: RoundedRectangleBorder(
+                  SizedBox(height: 20),
+                  TextField(
+                    controller: passwordController,
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña (6 dígitos)',
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      elevation: 5,
+                      prefixIcon: Icon(Icons.password, color: primaryColor),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: primaryColor, width: 2),
+                      ),
                     ),
-                    child: Text(
-                      'Ingresar',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18, letterSpacing: 8),
+                  ),
+                  SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _authenticate,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 5,
+                      ),
+                      child: Text(
+                        'Ingresar',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                ),
-              ],
+
+                  // ── Sección NFC ──────────────────────────────────────────
+                  if (_isNfcAvailable) ...[
+                    SizedBox(height: 24),
+                    Divider(),
+                    SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.nfc, color: primaryColor, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Acceso rápido con NFC',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: primaryColor,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    AnimatedContainer(
+                      duration: Duration(milliseconds: 300),
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: _isNfcAuthReading
+                            ? primaryColor.withOpacity(0.12)
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _isNfcAuthReading
+                              ? primaryColor
+                              : Colors.grey.shade300,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          if (_isNfcAuthReading)
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(primaryColor),
+                              ),
+                            )
+                          else
+                            Icon(Icons.nfc_outlined,
+                                color: Colors.grey, size: 18),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _nfcAuthStatus.isEmpty
+                                  ? 'Lectura NFC inactiva'
+                                  : _nfcAuthStatus,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: _isNfcAuthReading
+                                    ? primaryColor
+                                    : Colors.grey,
+                                fontWeight: _isNfcAuthReading
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: OutlinedButton.icon(
+                        icon: Icon(
+                          _isNfcAuthReading ? Icons.stop : Icons.play_arrow,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _isNfcAuthReading
+                              ? 'Detener lectura'
+                              : 'Iniciar lectura NFC',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryColor,
+                          side: BorderSide(color: primaryColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: _isNfcAuthReading
+                            ? _stopNfcAuthReading
+                            : _startNfcAuthReading,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),

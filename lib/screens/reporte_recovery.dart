@@ -8,7 +8,6 @@ import 'package:intl/date_symbol_data_local.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
 import '../services/report/report_cleaner.dart';
-import '../services/statistics/statistics_service.dart';
 
 class RecoveryReport extends StatefulWidget {
   const RecoveryReport({super.key});
@@ -144,117 +143,6 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
       final fileName = file.path.split('/').last.toLowerCase();
       return fileName.contains(searchQuery.toLowerCase());
     }).toList();
-  }
-
-  // Método para mostrar diálogo de confirmación para eliminar todos los cierres
-  void _showDeleteAllClosingsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
-            SizedBox(width: 8),
-            Text(
-              'Eliminar Todo',
-              style: TextStyle(
-                fontFamily: AppTheme.fontHemiheads,
-                color: Colors.red.shade700,
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '¿Está seguro que desea eliminar TODOS los cierres de caja almacenados?',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 12),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.red.shade700, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Esta acción no se puede deshacer. Se eliminarán todos los registros de la base de datos.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.red.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            child: Text('Cancelar', style: TextStyle(color: Colors.grey)),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade700,
-              foregroundColor: Colors.white,
-            ),
-            child: Text('Eliminar Todo'),
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await _deleteAllClosings();
-            },
-          ),
-        ],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-    );
-  }
-
-  // Método para eliminar todos los cierres
-  Future<void> _deleteAllClosings() async {
-    setState(() => isLoading = true);
-    
-    try {
-      final statsService = StatisticsService();
-      final success = await statsService.deleteAllClosings();
-      
-      if (success) {
-        // También eliminar los archivos PDF
-        final directory = await getApplicationDocumentsDirectory();
-        final files = directory.listSync();
-        for (var file in files) {
-          if (file.path.endsWith('.pdf')) {
-            try {
-              await File(file.path).delete();
-            } catch (e) {
-              print('Error al eliminar archivo: ${file.path}');
-            }
-          }
-        }
-        
-        _showSnackBar('Todos los cierres han sido eliminados', Colors.green);
-        await _loadPdfFiles();
-        await _loadReportStatistics();
-      } else {
-        _showSnackBar('Error al eliminar los cierres', AppTheme.coral);
-      }
-    } catch (e) {
-      _showSnackBar('Error: $e', AppTheme.coral);
-    } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
-    }
   }
 
   // Método para mostrar SnackBar con estilo personalizado
@@ -531,74 +419,11 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.delete_forever),
-            tooltip: 'Eliminar todos los cierres',
-            onPressed: _showDeleteAllClosingsDialog,
-          ),
-          IconButton(
             icon: Icon(Icons.refresh),
             tooltip: 'Actualizar',
             onPressed: () {
               _loadPdfFiles();
               _loadReportStatistics();
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.info_outline),
-            tooltip: 'Información',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text(
-                    'Información',
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontHemiheads,
-                      color: AppTheme.turquoiseDark,
-                    ),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Esta sección le permite ver e imprimir los reportes generados por el sistema.'),
-                      SizedBox(height: 12),
-                      Text('Política de retención:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text('• Se conservan todos los reportes de los últimos $_retentionPeriodDays días.'),
-                      Text('• Los reportes más antiguos se eliminan automáticamente.'),
-                      SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.circle, size: 12, color: AppTheme.turquoise),
-                          SizedBox(width: 4),
-                          Text('Más de 7 días restantes'),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Icon(Icons.circle, size: 12, color: AppTheme.coral.withOpacity(0.7)),
-                          SizedBox(width: 4),
-                          Text('Entre 3-7 días restantes'),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Icon(Icons.circle, size: 12, color: AppTheme.coral),
-                          SizedBox(width: 4),
-                          Text('Menos de 3 días restantes'),
-                        ],
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      child: Text('OK', style: TextStyle(color: AppTheme.turquoise)),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-              );
             },
           ),
         ],
@@ -1040,91 +865,6 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
             ),
           ],
         ),
-      ),
-      // Botón flotante para gestionar reportes
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            backgroundColor: Colors.transparent,
-            builder: (context) => Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              padding: EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Gestión de Reportes',
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontHemiheads,
-                      fontSize: 20,
-                      color: AppTheme.turquoiseDark,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppTheme.coralLight,
-                      child: Icon(Icons.cleaning_services, color: AppTheme.coral),
-                    ),
-                    title: Text('Limpiar reportes antiguos'),
-                    subtitle: Text('Eliminar reportes con más de 30 días'),
-                    onTap: () async {
-                      Navigator.pop(context);
-                      bool confirm = await showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text(
-                            'Confirmar Limpieza',
-                            style: TextStyle(
-                              fontFamily: AppTheme.fontHemiheads,
-                              color: AppTheme.coral,
-                            ),
-                          ),
-                          content: Text(
-                            '¿Está seguro de que desea eliminar los reportes vencidos? Esta acción no se puede deshacer.',
-                          ),
-                          actions: [
-                            TextButton(
-                              child: Text('Cancelar'),
-                              onPressed: () => Navigator.of(context).pop(false),
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.coral,
-                              ),
-                              onPressed: () => Navigator.of(context).pop(true),
-                              child: Text('Confirmar'),
-                            ),
-                          ],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ) ?? false;
-
-                      if (confirm) {
-                        int count = await ReportCleaner.cleanExpiredReportsOnStartup();
-                        _loadPdfFiles();
-                        _loadReportStatistics();
-                        _showSnackBar(
-                            'Se eliminaron $count reportes vencidos',
-                            AppTheme.turquoise
-                        );
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-        backgroundColor: AppTheme.turquoise,
-        child: Icon(Icons.more_vert),
       ),
     );
   }
