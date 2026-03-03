@@ -127,68 +127,6 @@ class _BackupScreenState extends State<BackupScreen> with SingleTickerProviderSt
     }
   }
 
-  Future<void> _importBackup() async {
-    setState(() {
-      _isLoading = true;
-      _statusMessage = 'Seleccionando archivo de copia de seguridad...';
-    });
-
-    try {
-      final backupFile = await BackupService.importBackup();
-
-      if (backupFile != null) {
-        setState(() {
-          _statusMessage = 'Archivo seleccionado. ¿Desea restaurar este archivo?';
-        });
-
-        // Mostrar diálogo de confirmación
-        final shouldRestore = await _showConfirmationDialog(
-            'Restaurar copia de seguridad',
-            '¿Está seguro que desea restaurar la aplicación con esta copia de seguridad? '
-                'Esto reemplazará todos los datos actuales.'
-        );
-
-        if (shouldRestore) {
-          await _restoreBackup(backupFile);
-        } else {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      } else {
-        setState(() {
-          _isLoading = false;
-          _statusMessage = 'No se seleccionó un archivo válido. Asegúrese de seleccionar un archivo con extensión .suray';
-        });
-
-        // Mostrar una alerta más descriptiva
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('El archivo seleccionado no es un respaldo válido. Debe tener extensión .suray'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 5),
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _statusMessage = 'Error al importar la copia de seguridad: $e';
-      });
-
-      // Mostrar error detallado
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 5),
-        ),
-      );
-    }
-  }
-
   Future<void> _restoreBackup(File backupFile) async {
     setState(() {
       _isLoading = true;
@@ -207,10 +145,10 @@ class _BackupScreenState extends State<BackupScreen> with SingleTickerProviderSt
 
       if (success) {
         await _showSuccessDialog(
-            'Restauración completada',
-            'La aplicación se ha restaurado exitosamente. '
-                'Reinicie la aplicación para aplicar todos los cambios.',
-            null
+          'Restauración completada',
+          'La aplicación se ha restaurado exitosamente. '
+              'Reinicie la aplicación para aplicar todos los cambios.',
+          null,
         );
       }
     } catch (e) {
@@ -521,52 +459,6 @@ class _BackupScreenState extends State<BackupScreen> with SingleTickerProviderSt
                                       ),
                                     ),
                                     onPressed: _isLoading ? null : _createBackup,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(height: 24),
-
-                    // Sección restaurar respaldo
-                    Card(
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Restaurar Copia de Seguridad',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.amber.shade800,
-                              ),
-                            ),
-                            SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    icon: Icon(Icons.upload_file),
-                                    label: Text('Importar Copia Externa'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                    onPressed: _isLoading ? null : _importBackup,
                                   ),
                                 ),
                               ],

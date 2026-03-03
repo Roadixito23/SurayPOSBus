@@ -1,5 +1,7 @@
 import 'package:intl/date_symbol_data_local.dart';
 import 'cargo_screen.dart';
+import 'backup_screen.dart';
+import 'reporte_recovery.dart';
 import '../services/pdf/generateCargo_Ticket.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
@@ -64,10 +66,6 @@ class _HomeState extends State<Home> {
   final TextEditingController _itemController = TextEditingController();
   final FocusNode _contactFocusNode = FocusNode();
 
-  // Configuración del AppBar
-  List<Map<String, dynamic>> _appBarSlots =
-      List.generate(8, (index) => {'isEmpty': true, 'element': null});
-
   // Variables para la configuración de botones
   bool _showIcons = true;
   double _textSizeMultiplier = 0.8;
@@ -105,7 +103,6 @@ class _HomeState extends State<Home> {
         _loadLastTransaction(),
         _loadDisplayPreferences(),
         _loadIconSettings(),
-        _loadAppBarConfig(),
       ]);
 
       // Luego cargar recursos PDF y verificar transacciones
@@ -154,7 +151,6 @@ class _HomeState extends State<Home> {
     super.didChangeDependencies();
     _loadDisplayPreferences();
     _loadIconSettings();
-    _loadAppBarConfig();
   }
 
   @override
@@ -170,13 +166,6 @@ class _HomeState extends State<Home> {
   }
 
   // ==================== MÉTODOS DE CARGA DE CONFIGURACIÓN ====================
-
-  Future<void> _loadAppBarConfig() async {
-    final loadedConfig = await HomeHelpers.loadAppBarConfig();
-    setState(() {
-      _appBarSlots = loadedConfig;
-    });
-  }
 
   Future<void> _loadIconSettings() async {
     final loadedIcons = await HomeHelpers.loadIconSettings();
@@ -237,13 +226,29 @@ class _HomeState extends State<Home> {
     Navigator.pushReplacementNamed(context, '/');
   }
 
+  Widget _buildDrawerSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey.shade500,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
+      child: Column(
         children: [
+          // ── Header ──────────────────────────────────────────────
           Container(
-            padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [Colors.amber.shade700, Colors.amber.shade900],
@@ -253,45 +258,129 @@ class _HomeState extends State<Home> {
             ),
             child: SafeArea(
               bottom: false,
-              child: Center(
-                child: Text(
-                  'Suray POS Bus',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 12),
+                  Icon(Icons.directions_bus_rounded,
+                      color: Colors.white, size: 40),
+                  SizedBox(height: 10),
+                  Text(
+                    'Suray POS Bus',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                ),
+                  SizedBox(height: 2),
+                  Text(
+                    'V.02.03.26',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          ListTile(
-            leading: Icon(Icons.assessment, color: Color(0xFF4F8FC0)),
-            title: Text('Cierres de Caja'),
-            onTap: () {
-              Navigator.pop(context);
-              _navigateToReports();
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.bar_chart, color: Colors.green.shade700),
-            title: Text('Estadísticas'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => StatisticsScreen()),
-              );
-            },
-          ),
-          Divider(),
-          ListTile(
-            leading: Icon(Icons.logout, color: Colors.red.shade700),
-            title: Text('Cerrar Sesión'),
-            onTap: () {
-              Navigator.pop(context);
-              _logout();
-            },
+          // ── Items ───────────────────────────────────────────────
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              children: [
+                // — Operaciones —
+                _buildDrawerSectionTitle('Operaciones'),
+                ListTile(
+                  leading:
+                      Icon(Icons.assessment_rounded, color: Color(0xFF4F8FC0)),
+                  title: Text('Cierres de Caja'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToReports();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.bar_chart_rounded,
+                      color: Colors.green.shade700),
+                  title: Text('Estadísticas'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => StatisticsScreen()),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.inventory_2_rounded,
+                      color: Colors.orange.shade700),
+                  title: Text('Cargo'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CargoScreen(
+                          onTransactionComplete: _saveLastTransaction,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                Divider(indent: 16, endIndent: 16),
+                // — Respaldo —
+                _buildDrawerSectionTitle('Respaldo'),
+                ListTile(
+                  leading: Icon(Icons.history_edu_rounded,
+                      color: Colors.indigo.shade400),
+                  title: Text('Recuperación de Reportes'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => RecoveryReport()),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading:
+                      Icon(Icons.backup_rounded, color: Colors.teal.shade600),
+                  title: Text('Copias de Seguridad'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => BackupScreen()),
+                    );
+                  },
+                ),
+                Divider(indent: 16, endIndent: 16),
+                // — Sistema —
+                _buildDrawerSectionTitle('Sistema'),
+                ListTile(
+                  leading: Icon(Icons.settings_rounded,
+                      color: Colors.green.shade700),
+                  title: Text('Configuración'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToSettings();
+                  },
+                ),
+                ListTile(
+                  leading:
+                      Icon(Icons.logout_rounded, color: Colors.red.shade600),
+                  title: Text('Cerrar Sesión'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _logout();
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1137,10 +1226,25 @@ class _HomeState extends State<Home> {
             elevation: 0,
             automaticallyImplyLeading: false,
             title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Badge de alerta si hay días pendientes
-                if (hasPendingDays)
+                // ── Izquierda: menú + badge ────────────────────────────
+                HomeAppBarWidgets.buildAppBarSlotWidget(
+                  context: context,
+                  slot: {'isEmpty': false, 'element': 'report'},
+                  currentDay: _currentDay,
+                  lastTransaction: _lastTransaction,
+                  hasReprinted: _hasReprinted,
+                  hasAnulado: _hasAnulado,
+                  isReprinting: _isReprinting,
+                  getCurrentDate: HomeHelpers.getCurrentDate,
+                  onNavigateToSettings: _navigateToSettings,
+                  onShowOfferDialog: _showOfferDialog,
+                  onShowPasswordDialog: _showPasswordDialog,
+                  onHandleReprint: _handleReprint,
+                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+                if (hasPendingDays) ...[
+                  SizedBox(width: 6),
                   AnimatedContainer(
                     duration: Duration(milliseconds: 300),
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1172,26 +1276,59 @@ class _HomeState extends State<Home> {
                       ],
                     ),
                   ),
-                // Slots del AppBar usando el widget modular
-                ...List.generate(_appBarSlots.length, (index) {
-                  return HomeAppBarWidgets.buildAppBarSlotWidget(
-                    context: context,
-                    slot: _appBarSlots[index],
-                    currentDay: _currentDay,
-                    lastTransaction: _lastTransaction,
-                    hasReprinted: _hasReprinted,
-                    hasAnulado: _hasAnulado,
-                    isReprinting: _isReprinting,
-                    getCurrentDate: HomeHelpers.getCurrentDate,
-                    onNavigateToSettings: _navigateToSettings,
-                    onShowOfferDialog: _showOfferDialog,
-                    onShowPasswordDialog: _showPasswordDialog,
-                    onHandleReprint: _handleReprint,
-                    onOpenDrawer: () {
-                      _scaffoldKey.currentState?.openDrawer();
-                    },
-                  );
-                }),
+                ],
+
+                // ── Espaciador ─────────────────────────────────────────
+                Spacer(),
+
+                // ── Derecha: anular · reimprimir · fecha ───────────────
+                HomeAppBarWidgets.buildAppBarSlotWidget(
+                  context: context,
+                  slot: {'isEmpty': false, 'element': 'delete'},
+                  currentDay: _currentDay,
+                  lastTransaction: _lastTransaction,
+                  hasReprinted: _hasReprinted,
+                  hasAnulado: _hasAnulado,
+                  isReprinting: _isReprinting,
+                  getCurrentDate: HomeHelpers.getCurrentDate,
+                  onNavigateToSettings: _navigateToSettings,
+                  onShowOfferDialog: _showOfferDialog,
+                  onShowPasswordDialog: _showPasswordDialog,
+                  onHandleReprint: _handleReprint,
+                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+                SizedBox(width: 10),
+                HomeAppBarWidgets.buildAppBarSlotWidget(
+                  context: context,
+                  slot: {'isEmpty': false, 'element': 'reprint'},
+                  currentDay: _currentDay,
+                  lastTransaction: _lastTransaction,
+                  hasReprinted: _hasReprinted,
+                  hasAnulado: _hasAnulado,
+                  isReprinting: _isReprinting,
+                  getCurrentDate: HomeHelpers.getCurrentDate,
+                  onNavigateToSettings: _navigateToSettings,
+                  onShowOfferDialog: _showOfferDialog,
+                  onShowPasswordDialog: _showPasswordDialog,
+                  onHandleReprint: _handleReprint,
+                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+                SizedBox(width: 10),
+                HomeAppBarWidgets.buildAppBarSlotWidget(
+                  context: context,
+                  slot: {'isEmpty': false, 'element': 'date'},
+                  currentDay: _currentDay,
+                  lastTransaction: _lastTransaction,
+                  hasReprinted: _hasReprinted,
+                  hasAnulado: _hasAnulado,
+                  isReprinting: _isReprinting,
+                  getCurrentDate: HomeHelpers.getCurrentDate,
+                  onNavigateToSettings: _navigateToSettings,
+                  onShowOfferDialog: _showOfferDialog,
+                  onShowPasswordDialog: _showPasswordDialog,
+                  onHandleReprint: _handleReprint,
+                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
               ],
             ),
             titleSpacing: 0,

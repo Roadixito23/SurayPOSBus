@@ -1,82 +1,104 @@
-import '../../database/database_service.dart';
-import '../../database/models/transaction_entity.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Servicio para obtener estadísticas de ventas
+/// Servicio para obtener estadísticas de ventas desde SharedPreferences
 class StatisticsService {
-  final DatabaseService _dbService;
+  static const String _transactionsKey = 'reporte_caja_transactions';
 
-  StatisticsService({DatabaseService? dbService})
-      : _dbService = dbService ?? DatabaseService();
+  /// Carga todas las transacciones almacenadas en SharedPreferences
+  Future<List<Map<String, dynamic>>> _loadAllTransactions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? data = prefs.getString(_transactionsKey);
+      if (data == null || data.isEmpty) return [];
+      final List<dynamic> decoded = json.decode(data);
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      print('StatisticsService: error cargando transacciones: $e');
+      return [];
+    }
+  }
 
-  /// Obtiene estadísticas de ventas de los últimos N días
+  /// Obtiene estadísticas de ventas de los últimos [days] días
   Future<Map<String, dynamic>> getSalesStatistics({int days = 30}) async {
     try {
-      final closings = await _dbService.getAllDailyClosings();
+      final all = await _loadAllTransactions();
+      if (all.isEmpty) return _emptyStats();
 
-      if (closings.isEmpty) {
-        return _emptyStats();
-      }
-
-      // Filtrar solo los últimos N días
       final now = DateTime.now();
-      final cutoffDate = now.subtract(Duration(days: days));
+      final cutoff = now.subtract(Duration(days: days));
 
-      final recentClosings = closings.where((c) {
-        final closingDate = DateTime(c.year, c.month, c.day);
-        return closingDate.isAfter(cutoffDate) ||
-            closingDate.isAtSameMomentAs(cutoffDate);
+      // Filtrar al rango de días solicitado
+      final transactions = all.where((t) {
+        try {
+          final d = int.parse(t['dia']);
+          final m = int.parse(t['mes']);
+          final y = int.parse(t['ano'] ?? now.year.toString());
+          final date = DateTime(y, m, d);
+          return !date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day));
+        } catch (_) {
+          return true;
+        }
       }).toList();
 
-      // Estadísticas generales
+      if (transactions.isEmpty) return _emptyStats();
+
       double totalVentas = 0;
-      double totalPasajes = 0;
       double totalCorrespondencias = 0;
       double totalAnulaciones = 0;
       int totalTransacciones = 0;
 
-      // Ventas por día (para gráfico)
+      // Ventas reales por día (solo positivas, sin anulaciones)
       Map<String, double> ventasPorDia = {};
-
-      // Ventas por tipo de pasaje
       Map<String, int> ventasPorTipo = {};
       Map<String, double> ingresosPorTipo = {};
 
-      for (var closing in recentClosings) {
-        totalVentas += closing.grandTotal;
-        totalPasajes += closing.totalPasajes;
-        totalCorrespondencias += closing.totalCorrespondencias;
-        totalAnulaciones += closing.totalAnulaciones.abs();
-        totalTransacciones += closing.transactionCount;
+      // Ventas por día de la semana (weekday 1=Lun … 7=Dom)
+      Map<String, int> weekdayByDate = {}; // key: 'dd/mm/yyyy' → weekday
 
-        // Agrupar ventas por día
-        final dateKey =
-            '${closing.day.toString().padLeft(2, '0')}/${closing.month.toString().padLeft(2, '0')}';
-        ventasPorDia[dateKey] =
-            (ventasPorDia[dateKey] ?? 0) + closing.grandTotal;
+      for (var t in transactions) {
+        final nombre = t['nombre']?.toString() ?? '';
+        final double valor = (t['valor'] as num?)?.toDouble() ?? 0.0;
+        final String dia = t['dia'] ?? '01';
+        final String mes = t['mes'] ?? '01';
+        final String ano = t['ano'] ?? now.year.toString();
+        final String dateKey = '$dia/$mes/$ano';
 
-        // Obtener transacciones para estadísticas detalladas
-        if (closing.id != null) {
-          final transactions =
-              await _dbService.getTransactionsByClosingId(closing.id!);
-          for (var tx in transactions) {
-            if (tx.category == TransactionCategory.pasaje) {
-              final tipo = tx.nombre;
-              ventasPorTipo[tipo] = (ventasPorTipo[tipo] ?? 0) + 1;
-              ingresosPorTipo[tipo] = (ingresosPorTipo[tipo] ?? 0) + tx.valor;
-            }
+        final bool isAnulacion = nombre.startsWith('Anulación:');
+        final bool isCargo = nombre.toLowerCase().startsWith('cargo');
+
+        if (isAnulacion) {
+          totalAnulaciones += valor.abs();
+        } else {
+          totalVentas += valor;
+          totalTransacciones++;
+
+          ventasPorDia[dateKey] = (ventasPorDia[dateKey] ?? 0) + valor;
+
+          // Guardar weekday para cada fecha
+          if (!weekdayByDate.containsKey(dateKey)) {
+            try {
+              final d = int.parse(dia);
+              final m = int.parse(mes);
+              final y = int.parse(ano);
+              weekdayByDate[dateKey] = DateTime(y, m, d).weekday; // 1=Lun, 7=Dom
+            } catch (_) {}
+          }
+
+          if (isCargo) {
+            totalCorrespondencias += valor;
+          } else {
+            ventasPorTipo[nombre] = (ventasPorTipo[nombre] ?? 0) + 1;
+            ingresosPorTipo[nombre] = (ingresosPorTipo[nombre] ?? 0) + valor;
           }
         }
       }
 
-      // Calcular promedios
-      final diasConVentas = recentClosings.length;
-      final promedioDiario =
-          diasConVentas > 0 ? totalVentas / diasConVentas : 0.0;
-      final promedioTransacciones =
-          diasConVentas > 0 ? totalTransacciones / diasConVentas : 0.0;
+      final diasConVentas = ventasPorDia.keys.length;
+      final promedioDiario = diasConVentas > 0 ? totalVentas / diasConVentas : 0.0;
 
       // Día con más ventas
-      String mejorDia = '';
+      String mejorDia = '-';
       double maxVentas = 0;
       ventasPorDia.forEach((dia, ventas) {
         if (ventas > maxVentas) {
@@ -86,7 +108,7 @@ class StatisticsService {
       });
 
       // Tipo de pasaje más vendido
-      String pasajeMasVendido = '';
+      String pasajeMasVendido = '-';
       int maxCantidad = 0;
       ventasPorTipo.forEach((tipo, cantidad) {
         if (cantidad > maxCantidad) {
@@ -95,15 +117,39 @@ class StatisticsService {
         }
       });
 
+      // ── Promedios por tipo de día ─────────────────────────────────────────
+      // Semana completa: promedio de TODOS los días con ventas
+      final promedioSemanal = diasConVentas > 0 ? totalVentas / diasConVentas : 0.0;
+
+      // Lun–Sáb (weekday 1..6)
+      final diasLunSab = ventasPorDia.entries
+          .where((e) => (weekdayByDate[e.key] ?? 0) >= 1 &&
+              (weekdayByDate[e.key] ?? 0) <= 6)
+          .toList();
+      final totalLunSab =
+          diasLunSab.fold(0.0, (sum, e) => sum + e.value);
+      final promedioLunSab =
+          diasLunSab.isNotEmpty ? totalLunSab / diasLunSab.length : 0.0;
+
+      // Domingos (weekday 7)
+      final diasDomingo = ventasPorDia.entries
+          .where((e) => (weekdayByDate[e.key] ?? 0) == 7)
+          .toList();
+      final totalDomingos =
+          diasDomingo.fold(0.0, (sum, e) => sum + e.value);
+      final promedioDomingos =
+          diasDomingo.isNotEmpty ? totalDomingos / diasDomingo.length : 0.0;
+
       return {
         'totalVentas': totalVentas,
-        'totalPasajes': totalPasajes,
+        'totalPasajes': totalVentas - totalCorrespondencias,
         'totalCorrespondencias': totalCorrespondencias,
         'totalAnulaciones': totalAnulaciones,
         'totalTransacciones': totalTransacciones,
         'diasConVentas': diasConVentas,
         'promedioDiario': promedioDiario,
-        'promedioTransacciones': promedioTransacciones,
+        'promedioTransacciones':
+            diasConVentas > 0 ? totalTransacciones / diasConVentas : 0.0,
         'mejorDia': mejorDia,
         'maxVentas': maxVentas,
         'pasajeMasVendido': pasajeMasVendido,
@@ -111,9 +157,12 @@ class StatisticsService {
         'ventasPorDia': ventasPorDia,
         'ventasPorTipo': ventasPorTipo,
         'ingresosPorTipo': ingresosPorTipo,
+        'promedioSemanal': promedioSemanal,
+        'promedioLunSab': promedioLunSab,
+        'promedioDomingos': promedioDomingos,
       };
     } catch (e) {
-      print('Error al obtener estadísticas: $e');
+      print('StatisticsService: error en getSalesStatistics: $e');
       return _emptyStats();
     }
   }
@@ -121,61 +170,37 @@ class StatisticsService {
   /// Obtiene las ventas de los últimos 7 días para el gráfico
   Future<List<Map<String, dynamic>>> getWeeklySales() async {
     try {
+      final all = await _loadAllTransactions();
       final now = DateTime.now();
-      final List<Map<String, dynamic>> weeklySales = [];
 
-      for (int i = 6; i >= 0; i--) {
-        final date = now.subtract(Duration(days: i));
-        final dateStr =
+      // Construir mapa dia → total vendido
+      Map<String, double> ventasPorFecha = {};
+      for (var t in all) {
+        final nombre = t['nombre']?.toString() ?? '';
+        if (nombre.startsWith('Anulación:')) continue;
+        final double valor = (t['valor'] as num?)?.toDouble() ?? 0.0;
+        if (valor <= 0) continue;
+        final String dia = t['dia'] ?? '';
+        final String mes = t['mes'] ?? '';
+        final String ano = t['ano'] ?? now.year.toString();
+        final key = '$ano-${mes.padLeft(2, '0')}-${dia.padLeft(2, '0')}';
+        ventasPorFecha[key] = (ventasPorFecha[key] ?? 0) + valor;
+      }
+
+      return List.generate(7, (i) {
+        final date = now.subtract(Duration(days: 6 - i));
+        final key =
             '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-        final closing = await _dbService.getDailyClosingByDate(dateStr);
-
-        weeklySales.add({
+        return {
           'dia': _getDayName(date.weekday),
           'fecha': '${date.day}/${date.month}',
-          'ventas': closing?.grandTotal ?? 0.0,
-          'transacciones': closing?.transactionCount ?? 0,
-        });
-      }
-
-      return weeklySales;
+          'ventas': ventasPorFecha[key] ?? 0.0,
+          'transacciones': 0,
+        };
+      });
     } catch (e) {
-      print('Error al obtener ventas semanales: $e');
+      print('StatisticsService: error en getWeeklySales: $e');
       return [];
-    }
-  }
-
-  /// Elimina todos los cierres de caja (y sus transacciones por CASCADE)
-  Future<bool> deleteAllClosings() async {
-    try {
-      final closings = await _dbService.getAllDailyClosings();
-
-      for (var closing in closings) {
-        if (closing.id != null) {
-          await _dbService.deleteDailyClosing(closing.id!);
-        }
-      }
-
-      // También limpiar cierres semanales y mensuales
-      final weeklyClosings = await _dbService.getAllWeeklyClosings();
-      for (var closing in weeklyClosings) {
-        if (closing.id != null) {
-          await _dbService.deleteWeeklyClosing(closing.id!);
-        }
-      }
-
-      final monthlyClosings = await _dbService.getAllMonthlyClosings();
-      for (var closing in monthlyClosings) {
-        if (closing.id != null) {
-          await _dbService.deleteMonthlyClosing(closing.id!);
-        }
-      }
-
-      return true;
-    } catch (e) {
-      print('Error al eliminar cierres: $e');
-      return false;
     }
   }
 
@@ -201,6 +226,9 @@ class StatisticsService {
       'ventasPorDia': <String, double>{},
       'ventasPorTipo': <String, int>{},
       'ingresosPorTipo': <String, double>{},
+      'promedioSemanal': 0.0,
+      'promedioLunSab': 0.0,
+      'promedioDomingos': 0.0,
     };
   }
 }

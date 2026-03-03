@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../services/statistics/statistics_service.dart';
 
 class StatisticsScreen extends StatefulWidget {
@@ -51,44 +52,88 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         foregroundColor: Colors.white,
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadStatistics,
-              child: SingleChildScrollView(
-                physics: AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Resumen General
-                    _buildSectionTitle('Resumen General (30 días)'),
-                    SizedBox(height: 12),
-                    _buildStatsGrid(),
+          ? Center(child: CircularProgressIndicator(color: Colors.amber.shade800))
+          : (_stats['totalTransacciones'] == 0
+              ? _buildEmptyState()
+              : RefreshIndicator(
+                  onRefresh: _loadStatistics,
+                  child: SingleChildScrollView(
+                    physics: AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Resumen General
+                        _buildSectionTitle('Resumen General (30 días)'),
+                        SizedBox(height: 12),
+                        _buildStatsGrid(),
 
-                    SizedBox(height: 24),
+                        SizedBox(height: 24),
 
-                    // Gráfico de Ventas Semanales
-                    _buildSectionTitle('Ventas de la Semana'),
-                    SizedBox(height: 12),
-                    _buildWeeklyChart(),
+                        // Gráfico de Ventas Semanales
+                        _buildSectionTitle('Ventas de la Semana'),
+                        SizedBox(height: 12),
+                        _buildWeeklyChart(),
 
-                    SizedBox(height: 24),
+                        SizedBox(height: 24),
 
-                    // Ventas por Tipo de Pasaje
-                    _buildSectionTitle('Ventas por Tipo de Pasaje'),
-                    SizedBox(height: 12),
-                    _buildPassengerTypeList(),
+                        // Ventas por Tipo de Pasaje
+                        _buildSectionTitle('Ventas por Tipo de Pasaje'),
+                        SizedBox(height: 12),
+                        _buildPassengerTypeList(),
 
-                    SizedBox(height: 24),
+                        SizedBox(height: 24),
 
-                    // Datos Destacados
-                    _buildSectionTitle('Datos Destacados'),
-                    SizedBox(height: 12),
-                    _buildHighlights(),
-                  ],
-                ),
+                        // Datos Destacados
+                        _buildSectionTitle('Datos Destacados'),
+                        SizedBox(height: 12),
+                        _buildHighlights(),
+                      ],
+                    ),
+                  ),
+                )),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bar_chart_outlined,
+                size: 72, color: Colors.amber.shade200),
+            SizedBox(height: 20),
+            Text(
+              'Sin datos aún',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.amber.shade900,
               ),
             ),
+            SizedBox(height: 10),
+            Text(
+              'Registra ventas desde la pantalla principal\npara ver las estadísticas aquí.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            ),
+            SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadStatistics,
+              icon: Icon(Icons.refresh),
+              label: Text('Actualizar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber.shade800,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -392,7 +437,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           _buildHighlightRow(
             Icons.star,
             'Mejor día',
-            '${_stats['mejorDia'] ?? '-'} (\$${_formatNumber(_stats['maxVentas'] ?? 0)})',
+            '${_stats['mejorDia'] ?? '-'} (\$${_formatNumber((_stats['maxVentas'] as num?)?.toDouble() ?? 0)})',
             Colors.amber,
           ),
           Divider(height: 24),
@@ -404,17 +449,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
           Divider(height: 24),
           _buildHighlightRow(
-            Icons.local_shipping,
-            'Correspondencias',
-            '\$${_formatNumber(_stats['totalCorrespondencias'] ?? 0)}',
-            Colors.purple,
+            Icons.calendar_view_week,
+            'Promedio semanal',
+            '\$${_formatNumber((_stats['promedioSemanal'] as num?)?.toDouble() ?? 0)}',
+            Colors.indigo,
           ),
           Divider(height: 24),
           _buildHighlightRow(
-            Icons.cancel,
-            'Anulaciones',
-            '\$${_formatNumber(_stats['totalAnulaciones'] ?? 0)}',
-            Colors.red.shade300,
+            Icons.directions_bus,
+            'Promedio Lun–Sáb',
+            '\$${_formatNumber((_stats['promedioLunSab'] as num?)?.toDouble() ?? 0)}',
+            Colors.teal.shade600,
+          ),
+          Divider(height: 24),
+          _buildHighlightRow(
+            Icons.wb_sunny,
+            'Promedio Domingos',
+            '\$${_formatNumber((_stats['promedioDomingos'] as num?)?.toDouble() ?? 0)}',
+            Colors.orange.shade700,
           ),
         ],
       ),
@@ -458,15 +510,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   String _formatNumber(double value) {
     if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(1)}M';
+      return NumberFormat('#,##0', 'es_CL').format(value / 1000000) + 'M';
     } else if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(1)}K';
+      return NumberFormat('#,##0', 'es_CL').format(value);
     }
-    return value.toStringAsFixed(0);
+    return NumberFormat('#,##0', 'es_CL').format(value);
   }
 
   String _formatNumberShort(double value) {
-    if (value >= 1000) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M';
+    } else if (value >= 1000) {
       return '${(value / 1000).toStringAsFixed(0)}K';
     }
     return value.toStringAsFixed(0);
