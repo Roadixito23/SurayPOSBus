@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ReporteCaja.dart';
 import '../services/pdf/pdfReport_generator.dart';
 import '../services/pdf/pdf_optimizer.dart';
+import '../services/pago_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../services/report/report_cleaner.dart';
 import 'reporte_recovery.dart'; // Import for navigation
@@ -556,55 +557,138 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+        child: Column(
           children: [
-            // Contador de transacciones
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${transactions.length}',
-                    style: const TextStyle(
-                      fontFamily: AppTheme.fontHemiheads,
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.turquoiseDark,
-                    ),
-                  ),
-                  Text(
-                    'Transacciones',
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ),
-            Container(width: 1, height: 44, color: Colors.grey.shade200),
-            // Total
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      '\$${NumberFormat('#,##0', 'es_ES').format(total)}',
-                      style: const TextStyle(
-                        fontFamily: AppTheme.fontHemiheads,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.coral,
+            Row(
+              children: [
+                // Contador de transacciones
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${transactions.length}',
+                        style: const TextStyle(
+                          fontFamily: AppTheme.fontHemiheads,
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.turquoiseDark,
+                        ),
                       ),
+                      Text(
+                        'Transacciones',
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 44, color: Colors.grey.shade200),
+                // Total
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '\$${NumberFormat('#,##0', 'es_ES').format(total)}',
+                          style: const TextStyle(
+                            fontFamily: AppTheme.fontHemiheads,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.coral,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Total',
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            // Resumen de pagos con tarjeta
+            FutureBuilder<double>(
+              future: PagoStorageService.obtenerTotalTarjetaHoy(),
+              builder: (context, snapshot) {
+                final totalTarjeta = snapshot.data ?? 0.0;
+                if (totalTarjeta <= 0) return SizedBox.shrink();
+                final totalEfectivo = total - totalTarjeta;
+                return Column(
+                  children: [
+                    SizedBox(height: 10),
+                    Divider(height: 1, color: Colors.grey.shade200),
+                    SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.attach_money,
+                                  size: 16, color: Colors.green.shade700),
+                              SizedBox(width: 4),
+                              Text(
+                                '\$${NumberFormat('#,##0', 'es_ES').format(totalEfectivo)}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                            width: 1, height: 20, color: Colors.grey.shade200),
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.credit_card,
+                                  size: 16, color: Colors.blue.shade700),
+                              SizedBox(width: 4),
+                              Text(
+                                '\$${NumberFormat('#,##0', 'es_ES').format(totalTarjeta)}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  Text(
-                    'Total',
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
+                    SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Efectivo',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade600),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Tarjeta',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),

@@ -6,6 +6,7 @@
     <uses-feature android:name="android.hardware.nfc" android:required="false"/>
 
     <queries>
+        <package android:name="com.sumup.merchant" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
@@ -39,6 +40,12 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="posbus" android:host="sumup-result" />
             </intent-filter>
         </activity>
         <meta-data

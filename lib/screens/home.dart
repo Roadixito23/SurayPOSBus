@@ -19,6 +19,9 @@ import '../services/pdf/generate_mo_ticket.dart';
 import '../models/ComprobanteModel.dart';
 import '../services/pdf/pdf_optimizer.dart';
 import '../services/closing/auto_closing_service.dart';
+import '../services/sumup_service.dart';
+import '../services/pago_storage_service.dart';
+import '../providers/sumup_result_notifier.dart';
 
 // Importar los nuevos módulos
 import '../services/home/pending_transaction_service.dart';
@@ -75,6 +78,10 @@ class _HomeState extends State<Home> {
   // Variables para la función de reimpresión
   Map<String, dynamic>? _lastTransaction;
   bool _isReprinting = false;
+
+  // Variables para pago con tarjeta SumUp
+  bool _isWaitingSumUp = false;
+  VoidCallback? _sumUpListener;
 
   @override
   void initState() {
@@ -162,6 +169,14 @@ class _HomeState extends State<Home> {
     _phoneController.dispose();
     _itemController.dispose();
     _contactFocusNode.dispose();
+    // Remover listener de SumUp si existe
+    if (_sumUpListener != null) {
+      try {
+        final notifier = Provider.of<SumUpResultNotifier>(context, listen: false);
+        notifier.removeListener(_sumUpListener!);
+      } catch (_) {}
+      _sumUpListener = null;
+    }
     super.dispose();
   }
 
@@ -509,6 +524,210 @@ class _HomeState extends State<Home> {
         _isButtonDisabled = false;
         _isLoading = false;
       });
+    }
+  }
+
+  // ==================== DIÁLOGO DE MÉTODO DE PAGO ====================
+
+  /// Muestra un diálogo para elegir entre Efectivo y Tarjeta.
+  /// Si se elige Efectivo, genera el ticket normalmente.
+  /// Si se elige Tarjeta, inicia el flujo SumUp Deep Link.
+  void _showPaymentMethodDialog(String tipo, double valor, bool isCorrespondencia) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                'Método de Pago',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                '$tipo — \$${NumberFormat('#,##0', 'es_CL').format(valor)}',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              ),
+              SizedBox(height: 20),
+              Row(
+                children: [
+                  // Botón Efectivo
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.attach_money, size: 24),
+                        label: Text('Efectivo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _generateTicket(tipo, valor, isCorrespondencia);
+                        },
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  // Botón Tarjeta
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.credit_card, size: 24),
+                        label: Text('Tarjeta', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _generateTicketConTarjeta(tipo, valor, isCorrespondencia);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Inicia cobro con tarjeta vía SumUp y, al recibir resultado exitoso,
+  /// genera el ticket y guarda el pago en PagoStorageService.
+  Future<void> _generateTicketConTarjeta(
+      String tipo, double valor, bool isCorrespondencia) async {
+    if (_isButtonDisabled) return;
+
+    setState(() {
+      _isWaitingSumUp = true;
+      _isButtonDisabled = true;
+    });
+
+    try {
+      // Abrir la app de SumUp para cobrar
+      await SumUpService.cobrar(monto: valor, titulo: 'Pasaje Suray - $tipo');
+
+      // Escuchar resultado desde el notifier
+      final notifier = Provider.of<SumUpResultNotifier>(context, listen: false);
+
+      // Remover listener anterior si existe
+      if (_sumUpListener != null) {
+        notifier.removeListener(_sumUpListener!);
+      }
+
+      _sumUpListener = () async {
+        final exitoso = notifier.exitoso;
+        if (exitoso == null) return; // Aún no hay resultado
+
+        final txCode = notifier.txCode;
+        notifier.limpiar();
+
+        // Remover el listener
+        if (_sumUpListener != null) {
+          notifier.removeListener(_sumUpListener!);
+          _sumUpListener = null;
+        }
+
+        if (!mounted) return;
+
+        if (exitoso) {
+          // Guardar pago con tarjeta
+          await PagoStorageService.guardarPagoTarjeta(
+            monto: valor,
+            txCode: txCode,
+            fecha: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
+          );
+
+          // Generar el ticket normalmente (igual que efectivo)
+          setState(() {
+            _isWaitingSumUp = false;
+          });
+          await _generateTicket(tipo, valor, isCorrespondencia);
+        } else {
+          setState(() {
+            _isWaitingSumUp = false;
+            _isButtonDisabled = false;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.white),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Pago con tarjeta rechazado o cancelado')),
+                  ],
+                ),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+                action: SnackBarAction(
+                  label: 'Reintentar',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    _generateTicketConTarjeta(tipo, valor, isCorrespondencia);
+                  },
+                ),
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+        }
+      };
+
+      notifier.addListener(_sumUpListener!);
+    } catch (e) {
+      setState(() {
+        _isWaitingSumUp = false;
+        _isButtonDisabled = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(child: Text('$e')),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade800,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -1570,7 +1789,7 @@ class _HomeState extends State<Home> {
                                   ? Colors.blueAccent
                                   : Colors.black,
                               onPressed: () {
-                                _generateTicket(pasajes[0]['nombre'],
+                                _showPaymentMethodDialog(pasajes[0]['nombre'],
                                     pasajes[0]['precio'], false);
                               },
                               showIcons: _showIcons,
@@ -1592,7 +1811,7 @@ class _HomeState extends State<Home> {
                                   ? Colors.pinkAccent
                                   : Colors.black,
                               onPressed: () {
-                                _generateTicket(pasajes[4]['nombre'],
+                                _showPaymentMethodDialog(pasajes[4]['nombre'],
                                     pasajes[4]['precio'], false);
                               },
                               showIcons: _showIcons,
@@ -1622,7 +1841,7 @@ class _HomeState extends State<Home> {
                                   ? Colors.pinkAccent
                                   : Colors.black,
                               onPressed: () {
-                                _generateTicket(pasajes[1]['nombre'],
+                                _showPaymentMethodDialog(pasajes[1]['nombre'],
                                     pasajes[1]['precio'], false);
                               },
                               showIcons: _showIcons,
@@ -1644,7 +1863,7 @@ class _HomeState extends State<Home> {
                                   ? Colors.pinkAccent
                                   : Colors.black,
                               onPressed: () {
-                                _generateTicket(pasajes[3]['nombre'],
+                                _showPaymentMethodDialog(pasajes[3]['nombre'],
                                     pasajes[3]['precio'], false);
                               },
                               showIcons: _showIcons,
@@ -1674,7 +1893,7 @@ class _HomeState extends State<Home> {
                                   ? Colors.yellowAccent
                                   : Colors.black,
                               onPressed: () {
-                                _generateTicket(pasajes[2]['nombre'],
+                                _showPaymentMethodDialog(pasajes[2]['nombre'],
                                     pasajes[2]['precio'], false);
                               },
                               showIcons: _showIcons,
@@ -1699,12 +1918,12 @@ class _HomeState extends State<Home> {
                               textColor: Colors.black,
                               onPressed: () {
                                 if (pasajes.length > 5) {
-                                  _generateTicket(pasajes[5]['nombre'],
+                                  _showPaymentMethodDialog(pasajes[5]['nombre'],
                                       pasajes[5]['precio'], false);
                                 } else {
                                   double defaultPrice =
                                       _switchValue ? 1300.0 : 1000.0;
-                                  _generateTicket('Escolar Intermedio',
+                                  _showPaymentMethodDialog('Escolar Intermedio',
                                       defaultPrice, false);
                                   print(
                                       'ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
@@ -1772,6 +1991,70 @@ class _HomeState extends State<Home> {
               ),
             ],
           ),
+
+          // Overlay de espera SumUp
+          if (_isWaitingSumUp)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Card(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.blue.shade700),
+                        ),
+                        SizedBox(height: 20),
+                        Text(
+                          'Esperando pago con tarjeta...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Complete el pago en la app de SumUp',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        SizedBox(height: 20),
+                        TextButton(
+                          onPressed: () {
+                            final notifier = Provider.of<SumUpResultNotifier>(
+                                context,
+                                listen: false);
+                            if (_sumUpListener != null) {
+                              notifier.removeListener(_sumUpListener!);
+                              _sumUpListener = null;
+                            }
+                            setState(() {
+                              _isWaitingSumUp = false;
+                              _isButtonDisabled = false;
+                            });
+                          },
+                          child: Text(
+                            'Cancelar',
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
