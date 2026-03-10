@@ -10,7 +10,7 @@ import 'backup_screen.dart';
 import '../models/ComprobanteModelSettings.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
-
+import 'button_color_settings_screen.dart';
 
 class Settings extends StatefulWidget {
   const Settings({super.key});
@@ -19,12 +19,14 @@ class Settings extends StatefulWidget {
   _SettingsState createState() => _SettingsState();
 }
 
-class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin {
+class _SettingsState extends State<Settings>
+    with SingleTickerProviderStateMixin {
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController idController = TextEditingController();
   bool isAuthenticated = false;
   double _textSizeMultiplier = 0.8;
   bool _showIcons = true;
+  double _buttonOpacity = 1.0; // Transparencia de los botones (0.0 - 1.0)
   double _pdfEndMargin = 69.0; // Valor por defecto
   bool _isNfcAvailable = false;
   bool _isReadingNfc = false;
@@ -33,6 +35,10 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   bool _isNfcAuthReading = false;
   String _nfcAuthStatus = '';
   List<String> _linkedNfcCards = [];
+  // Control para habilitar/deshabilitar pagos con tarjeta SumUp
+  bool _sumUpEnabled = true;
+  // Controller para el affiliate key de SumUp
+  final TextEditingController _sumUpAffiliateKeyController = TextEditingController();
 
   Future<bool> _showComprobanteAuthDialog() async {
     final prefs = await SharedPreferences.getInstance();
@@ -42,38 +48,40 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     String entry = '';
 
     return (await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text('Autenticación - N° Comprobante'),
-          content: TextField(
-            onChanged: (v) => entry = v,
-            decoration: InputDecoration(
-              labelText: 'Contraseña (6 dígitos)',
-              border: OutlineInputBorder(),
-            ),
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancelar')),
-            ElevatedButton(
-              onPressed: () {
-                if (entry == allowed) {
-                  Navigator.pop(ctx, true);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Contraseña incorrecta'))
-                );
-                }
-              },
-              child: Text('OK'),
-            ),
-          ],
-        );
-      },
-    )) ?? false;
+          context: context,
+          builder: (ctx) {
+            return AlertDialog(
+              title: Text('Autenticación - N° Comprobante'),
+              content: TextField(
+                onChanged: (v) => entry = v,
+                decoration: InputDecoration(
+                  labelText: 'Contraseña (6 dígitos)',
+                  border: OutlineInputBorder(),
+                ),
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: Text('Cancelar')),
+                ElevatedButton(
+                  onPressed: () {
+                    if (entry == allowed) {
+                      Navigator.pop(ctx, true);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Contraseña incorrecta')));
+                    }
+                  },
+                  child: Text('OK'),
+                ),
+              ],
+            );
+          },
+        )) ??
+        false;
   }
 
   // State variable for icon spacing
@@ -110,18 +118,20 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   // Flag to track if settings have changed
   bool _settingsChanged = false;
 
-  final String appVersion = 'V.02.03.26';
+  final String appVersion = 'V.05.03.26';
 
   // Variables para TabController
   late TabController _tabController;
 
-  // Colores de la aplicación
-  final Color primaryColor = Colors.amber[800]!;
-  final Color accentColor = Colors.orange;
-  final Color backgroundColor = Colors.grey[100]!;
+  // Colores de la aplicación - Paleta naranja empresarial moderna
+  final Color primaryColor = Color(0xFFFF6B35); // Naranja vibrante
+  final Color primaryLight = Color(0xFFFF8C61); // Naranja claro
+  final Color primaryDark = Color(0xFFE55428); // Naranja oscuro
+  final Color accentColor = Color(0xFFF7931E); // Naranja dorado
+  final Color backgroundColor = Color(0xFFFAFAFA);
   final Color cardColor = Colors.white;
   final Color textColor = Colors.black87;
-  final Color buttonColor = Colors.orange;
+  final Color buttonColor = Color(0xFFFF6B35);
 
   // Variables para las abreviaturas
   final Map<String, String> _abbreviations = {
@@ -147,6 +157,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     _loadPdfEndMargin(); // Agregar esta línea
     _checkNfcAvailability();
     _loadLinkedNfcCards();
+    _loadSumUpEnabled();
+    _loadSumUpAffiliateKey();
     _tabController = TabController(length: 4, vsync: this);
   }
 
@@ -158,11 +170,13 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     _tabController.dispose();
     passwordController.dispose();
     idController.dispose();
+    _sumUpAffiliateKeyController.dispose();
     for (var controller in _abbreviationControllers.values) {
       controller.dispose();
     }
     super.dispose();
   }
+
   IconData _getIconFromString(String iconName) {
     switch (iconName) {
       case 'people':
@@ -220,9 +234,9 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
 
         // Load button icons
         final Map<String, dynamic>? savedIcons =
-        prefs.getString('buttonIcons') != null
-            ? json.decode(prefs.getString('buttonIcons')!)
-            : null;
+            prefs.getString('buttonIcons') != null
+                ? json.decode(prefs.getString('buttonIcons')!)
+                : null;
 
         if (savedIcons != null) {
           savedIcons.forEach((key, value) {
@@ -296,18 +310,20 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                 return InkWell(
                   onTap: () {
                     setState(() {
-                      _buttonIcons[buttonName] = _getStringFromIcon(
-                          iconInfo['icon']);
+                      _buttonIcons[buttonName] =
+                          _getStringFromIcon(iconInfo['icon']);
                     });
                     Navigator.of(context).pop();
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isSelected ? primaryColor.withOpacity(0.2) : Colors
-                          .grey[200],
+                      color: isSelected
+                          ? primaryColor.withOpacity(0.2)
+                          : Colors.grey[200],
                       borderRadius: BorderRadius.circular(10),
-                      border: isSelected ? Border.all(
-                          color: primaryColor, width: 2) : null,
+                      border: isSelected
+                          ? Border.all(color: primaryColor, width: 2)
+                          : null,
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -366,8 +382,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
 
     // Guardar cada abreviatura
     for (var key in _abbreviations.keys) {
-      String abbreviation = _abbreviationControllers[key]?.text ??
-          _abbreviations[key]!;
+      String abbreviation =
+          _abbreviationControllers[key]?.text ?? _abbreviations[key]!;
       _abbreviations[key] = abbreviation; // Actualizar el mapa
       await prefs.setString(key, abbreviation);
     }
@@ -396,9 +412,10 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
       setState(() {
         _showIcons = prefs.getBool('showIcons') ?? true;
         _textSizeMultiplier = prefs.getDouble('textSizeMultiplier') ?? 0.8;
+        _buttonOpacity = prefs.getDouble('buttonOpacity') ?? 1.0;
       });
       print(
-          'Settings loaded: showIcons=$_showIcons, textSizeMultiplier=$_textSizeMultiplier');
+          'Settings loaded: showIcons=$_showIcons, textSizeMultiplier=$_textSizeMultiplier, buttonOpacity=$_buttonOpacity');
     } catch (e) {
       print('Error al cargar preferencias de visualización: $e');
     }
@@ -410,17 +427,19 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
 
       // Debug print to see what we're saving
       print(
-          'Saving settings: showIcons=$_showIcons, textSizeMultiplier=$_textSizeMultiplier');
+          'Saving settings: showIcons=$_showIcons, textSizeMultiplier=$_textSizeMultiplier, buttonOpacity=$_buttonOpacity');
 
       // Use await to ensure the values are actually saved
       await prefs.setBool('showIcons', _showIcons);
       await prefs.setDouble('textSizeMultiplier', _textSizeMultiplier);
+      await prefs.setDouble('buttonOpacity', _buttonOpacity);
 
       // Debug print to confirm values are saved
       print('Settings saved. Verifying...');
       bool? savedIcons = prefs.getBool('showIcons');
       double? savedSize = prefs.getDouble('textSizeMultiplier');
-      print('Verified: showIcons=$savedIcons, textSizeMultiplier=$savedSize');
+      double? savedOpacity = prefs.getDouble('buttonOpacity');
+      print('Verified: showIcons=$savedIcons, textSizeMultiplier=$savedSize, buttonOpacity=$savedOpacity');
 
       // Set flag that settings have changed
       _settingsChanged = true;
@@ -502,34 +521,35 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   Future<void> _resetComprobanteCounter() async {
     // Mostrar diálogo de confirmación
     bool confirm = await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange),
-              SizedBox(width: 10),
-              Text('Confirmar reinicio'),
-            ],
-          ),
-          content: Text(
-              '¿Está seguro que desea reiniciar el contador de comprobantes?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                  SizedBox(width: 10),
+                  Text('Confirmar reinicio'),
+                ],
               ),
-              child: Text('Reiniciar'),
-            ),
-          ],
-        );
-      },
-    ) ?? false;
+              content: Text(
+                  '¿Está seguro que desea reiniciar el contador de comprobantes?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                  ),
+                  child: Text('Reiniciar'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
 
     if (confirm) {
       final prefs = await SharedPreferences.getInstance();
@@ -669,10 +689,13 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
           final nfcTag = NfcTagAndroid.from(tag);
           if (nfcTag != null) {
             final tagId = nfcTag.id;
-            final tagIdHex = tagId.map((b) => b.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
-            
+            final tagIdHex = tagId
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join(':')
+                .toUpperCase();
+
             await NfcManager.instance.stopSession();
-            
+
             setState(() {
               _isReadingNfc = false;
               if (!_linkedNfcCards.contains(tagIdHex)) {
@@ -832,6 +855,86 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     );
   }
 
+  Future<void> _loadSumUpEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _sumUpEnabled = prefs.getBool('sumUpEnabled') ?? true;
+    });
+  }
+
+  Future<void> _loadSumUpAffiliateKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    final affiliateKey = prefs.getString('sumup_affiliate_key') ?? 
+        'sup_afk_BydGVQ41DbNaM3Mm441GRPxon06MIkXu'; // Valor por defecto
+    _sumUpAffiliateKeyController.text = affiliateKey;
+  }
+
+  Future<void> _saveSumUpAffiliateKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    final newKey = _sumUpAffiliateKeyController.text.trim();
+    
+    if (newKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 10),
+              Text('El Affiliate Key no puede estar vacío'),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
+    await prefs.setString('sumup_affiliate_key', newKey);
+    _settingsChanged = true;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 10),
+            Text('Affiliate Key guardado correctamente'),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  Future<void> _saveSumUpEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('sumUpEnabled', value);
+    setState(() {
+      _sumUpEnabled = value;
+    });
+
+    // Set flag that settings have changed
+    _settingsChanged = true;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 10),
+            Text(value
+                ? 'Pago con tarjeta habilitado'
+                : 'Pago con tarjeta deshabilitado'),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -842,39 +945,84 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
         return false; // Prevent default back action since we handle it manually
       },
       child: Scaffold(
+        backgroundColor: backgroundColor,
         appBar: AppBar(
-          title: Text(
-            'Configuración',
-            style: TextStyle(fontWeight: FontWeight.bold),
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [primaryColor, primaryDark],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
           ),
-          backgroundColor: primaryColor,
+          title: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.settings_rounded, size: 24),
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Configuración',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Text(
+                    'Sistema POS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           elevation: 0,
-          centerTitle: true,
           actions: [
             if (!isAuthenticated && _isNfcAvailable)
-              IconButton(
-                icon: Icon(
-                  _isNfcAuthReading ? Icons.nfc : Icons.nfc_outlined,
+              Container(
+                margin: EdgeInsets.only(right: 4),
+                child: IconButton(
+                  icon: Icon(
+                    _isNfcAuthReading ? Icons.nfc : Icons.nfc_outlined,
+                  ),
+                  tooltip: _isNfcAuthReading
+                      ? 'Detener lectura NFC'
+                      : 'Leer tarjeta NFC',
+                  onPressed: _isNfcAuthReading
+                      ? _stopNfcAuthReading
+                      : _startNfcAuthReading,
                 ),
-                tooltip: _isNfcAuthReading
-                    ? 'Detener lectura NFC'
-                    : 'Leer tarjeta NFC',
-                onPressed: _isNfcAuthReading
-                    ? _stopNfcAuthReading
-                    : _startNfcAuthReading,
               ),
             if (isAuthenticated)
-              IconButton(
-                icon: Icon(Icons.logout),
-                tooltip: 'Cerrar sesión',
-                onPressed: () {
-                  setState(() {
-                    isAuthenticated = false;
-                    passwordController.clear();
-                  });
-                  // Reiniciar lectura NFC de autenticación
-                  if (_isNfcAvailable) _startNfcAuthReading();
-                },
+              Container(
+                margin: EdgeInsets.only(right: 12),
+                child: IconButton(
+                  icon: Icon(Icons.logout_rounded),
+                  tooltip: 'Cerrar sesión',
+                  onPressed: () {
+                    setState(() {
+                      isAuthenticated = false;
+                      passwordController.clear();
+                    });
+                    // Reiniciar lectura NFC de autenticación
+                    if (_isNfcAvailable) _startNfcAuthReading();
+                  },
+                ),
               ),
           ],
           leading: IconButton(
@@ -885,7 +1033,6 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
             },
           ),
         ),
-        backgroundColor: backgroundColor,
         body: isAuthenticated
             ? _buildSettingsContent()
             : _buildAuthenticationForm(),
@@ -994,7 +1141,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     AnimatedContainer(
                       duration: Duration(milliseconds: 300),
                       width: double.infinity,
-                      padding: EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                      padding:
+                          EdgeInsets.symmetric(vertical: 10, horizontal: 14),
                       decoration: BoxDecoration(
                         color: _isNfcAuthReading
                             ? primaryColor.withOpacity(0.12)
@@ -1085,37 +1233,67 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
 
     return Column(
       children: [
-        // Tabs en la parte superior
+        // Tabs modernizadas con diseño material
         Container(
-          color: primaryColor,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [primaryDark, primaryColor],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: primaryColor.withOpacity(0.3),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
           child: TabBar(
             controller: _tabController,
             indicator: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(10),
-                topRight: Radius.circular(10),
-              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: Offset(0, -2),
+                ),
+              ],
             ),
             labelColor: primaryColor,
-            unselectedLabelColor: Colors.white,
-            isScrollable: true, // Make tabs scrollable
+            unselectedLabelColor: Colors.white.withOpacity(0.8),
+            labelStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+            unselectedLabelStyle: TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 12,
+            ),
+            isScrollable: true,
+            indicatorSize: TabBarIndicatorSize.tab,
             tabs: [
               Tab(
-                icon: Icon(Icons.settings),
+                icon: Icon(Icons.tune_rounded, size: 22),
                 text: 'General',
+                height: 65,
               ),
               Tab(
-                icon: Icon(Icons.attach_money),
+                icon: Icon(Icons.payments_rounded, size: 22),
                 text: 'Precios',
+                height: 65,
               ),
               Tab(
-                icon: Icon(Icons.brush),
+                icon: Icon(Icons.palette_rounded, size: 22),
                 text: 'Apariencia',
+                height: 65,
               ),
               Tab(
-                icon: Icon(Icons.short_text),
+                icon: Icon(Icons.notes_rounded, size: 22),
                 text: 'Abreviaturas',
+                height: 65,
               ),
             ],
           ),
@@ -1178,8 +1356,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                           keyboardType: TextInputType.number,
                           maxLength: 2,
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight
-                              .bold),
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
                       SizedBox(width: 10),
@@ -1218,7 +1396,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                       if (await _showComprobanteAuthDialog()) {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => ComprobanteModelSettings()),
+                          MaterialPageRoute(
+                              builder: (_) => ComprobanteModelSettings()),
                         );
                       }
                     },
@@ -1248,7 +1427,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                       decoration: BoxDecoration(
                         color: backgroundColor,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: primaryColor.withOpacity(0.3)),
+                        border:
+                            Border.all(color: primaryColor.withOpacity(0.3)),
                       ),
                       child: Row(
                         children: [
@@ -1268,11 +1448,15 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: _isReadingNfc ? _stopNfcLinking : _startNfcLinking,
+                          onPressed: _isReadingNfc
+                              ? _stopNfcLinking
+                              : _startNfcLinking,
                           icon: Icon(_isReadingNfc ? Icons.stop : Icons.add),
-                          label: Text(_isReadingNfc ? 'Detener' : 'Vincular Tarjeta'),
+                          label: Text(
+                              _isReadingNfc ? 'Detener' : 'Vincular Tarjeta'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _isReadingNfc ? Colors.red : buttonColor,
+                            backgroundColor:
+                                _isReadingNfc ? Colors.red : buttonColor,
                             foregroundColor: Colors.white,
                           ),
                         ),
@@ -1288,17 +1472,19 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                       ),
                     )
                   else
-                    ..._linkedNfcCards.map((cardId) => Card(
-                      margin: EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: Icon(Icons.nfc, color: primaryColor),
-                        title: Text(cardId),
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _removeNfcCard(cardId),
-                        ),
-                      ),
-                    )).toList(),
+                    ..._linkedNfcCards
+                        .map((cardId) => Card(
+                              margin: EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: Icon(Icons.nfc, color: primaryColor),
+                                title: Text(cardId),
+                                trailing: IconButton(
+                                  icon: Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => _removeNfcCard(cardId),
+                                ),
+                              ),
+                            ))
+                        .toList(),
                 ],
               ),
             ),
@@ -1346,9 +1532,12 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('10px', style: TextStyle(color: Colors.grey[600])),
-                                Text('Default: 69px', style: TextStyle(color: Colors.grey[600])),
-                                Text('150px', style: TextStyle(color: Colors.grey[600])),
+                                Text('10px',
+                                    style: TextStyle(color: Colors.grey[600])),
+                                Text('Default: 69px',
+                                    style: TextStyle(color: Colors.grey[600])),
+                                Text('150px',
+                                    style: TextStyle(color: Colors.grey[600])),
                               ],
                             ),
                           ],
@@ -1433,6 +1622,160 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
 
           SizedBox(height: 20),
 
+          _buildSectionCard(
+            title: 'Métodos de Pago',
+            icon: Icons.payment,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Habilita o deshabilita los pagos con tarjeta SumUp',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: backgroundColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: SwitchListTile(
+                      title: Text(
+                        'Pago con Tarjeta (SumUp)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      subtitle: Text(
+                        _sumUpEnabled
+                            ? 'Los usuarios podrán pagar con tarjeta'
+                            : 'Solo se permitirá pago en efectivo',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      value: _sumUpEnabled,
+                      activeColor: primaryColor,
+                      onChanged: (bool value) {
+                        _saveSumUpEnabled(value);
+                      },
+                      secondary: Icon(
+                        _sumUpEnabled
+                            ? Icons.credit_card
+                            : Icons.credit_card_off,
+                        color: _sumUpEnabled ? primaryColor : Colors.grey,
+                        size: 32,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  if (!_sumUpEnabled)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange[200]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.orange[700]),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'El botón de pago con tarjeta estará oculto en la pantalla principal',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.orange[900],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          SizedBox(height: 20),
+
+          _buildSectionCard(
+            title: 'Configuración SumUp',
+            icon: Icons.credit_card,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Configura el Affiliate Key de tu cuenta SumUp',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  SizedBox(height: 16),
+                  TextField(
+                    controller: _sumUpAffiliateKeyController,
+                    decoration: InputDecoration(
+                      labelText: 'Affiliate Key',
+                      hintText: 'sup_afk_...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      prefixIcon: Icon(Icons.key),
+                      helperText: 'Ingrese su Affiliate Key de SumUp',
+                      helperMaxLines: 2,
+                    ),
+                    maxLines: 2,
+                  ),
+                  SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _saveSumUpAffiliateKey,
+                      icon: Icon(Icons.save),
+                      label: Text('Guardar Affiliate Key'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        padding: EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'El Affiliate Key se usa para identificar tu cuenta en las transacciones con SumUp. Puedes obtenerlo desde tu dashboard de SumUp.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue[900],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          SizedBox(height: 20),
+
           // Version information added at the bottom
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -1451,8 +1794,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildPriceSettings(TicketModel ticketModel,
-      SundayTicketModel sundayTicketModel) {
+  Widget _buildPriceSettings(
+      TicketModel ticketModel, SundayTicketModel sundayTicketModel) {
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
       child: Column(
@@ -1481,16 +1824,15 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.blue[50],
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: Colors.blue[200]!),
                         ),
                         child: Text(
-                          '\$${NumberFormat('#,##0', 'es_ES').format(
-                              ticketModel.pasajes[index]['precio'])}',
+                          '\$${NumberFormat('#,##0', 'es_ES').format(ticketModel.pasajes[index]['precio'])}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -1511,9 +1853,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
               },
             ),
           ),
-
           SizedBox(height: 20),
-
           _buildSectionCard(
             title: 'Precios Domingo y Feriados',
             icon: Icons.weekend,
@@ -1537,16 +1877,15 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.red[50],
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: Colors.red[200]!),
                         ),
                         child: Text(
-                          '\$${NumberFormat('#,##0', 'es_ES').format(
-                              sundayTicketModel.pasajes[index]['precio'])}',
+                          '\$${NumberFormat('#,##0', 'es_ES').format(sundayTicketModel.pasajes[index]['precio'])}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -1568,9 +1907,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
               },
             ),
           ),
-
           SizedBox(height: 10),
-
           Center(
             child: Text(
               'Toque en el icono de lápiz para editar el nombre y precio',
@@ -1586,11 +1923,99 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
   }
 
   Widget _buildAppearanceSettings() {
+    final ticketModel = Provider.of<TicketModel>(context);
+    final sundayTicketModel = Provider.of<SundayTicketModel>(context);
+
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildSectionCard(
+            title: 'Colores de Botones - Lunes a Sábado',
+            icon: Icons.palette,
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: ticketModel.pasajes.length,
+              separatorBuilder: (context, index) => Divider(height: 1),
+              itemBuilder: (context, index) {
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.blue[100],
+                    child: Icon(Icons.color_lens, color: Colors.blue),
+                  ),
+                  title: Text(
+                    ticketModel.pasajes[index]['nombre'],
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(Icons.palette, color: primaryColor),
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ButtonColorSettingsScreen(
+                            buttonName: ticketModel.pasajes[index]['nombre'],
+                            ticketType: 'weekday',
+                            buttonIndex: index,
+                          ),
+                        ),
+                      );
+                      if (result == true) {
+                        _settingsChanged = true;
+                      }
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+          SizedBox(height: 20),
+          _buildSectionCard(
+            title: 'Colores de Botones - Domingo/Feriado',
+            icon: Icons.palette,
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: sundayTicketModel.pasajes.length,
+              separatorBuilder: (context, index) => Divider(height: 1),
+              itemBuilder: (context, index) {
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.red[100],
+                    child: Icon(Icons.color_lens, color: Colors.red),
+                  ),
+                  title: Text(
+                    sundayTicketModel.pasajes[index]['nombre'],
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(Icons.palette, color: primaryColor),
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ButtonColorSettingsScreen(
+                            buttonName:
+                                sundayTicketModel.pasajes[index]['nombre'],
+                            ticketType: 'sunday',
+                            buttonIndex: index,
+                          ),
+                        ),
+                      );
+                      if (result == true) {
+                        _settingsChanged = true;
+                      }
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+          SizedBox(height: 20),
           _buildSectionCard(
             title: 'Apariencia de Botones',
             icon: Icons.palette,
@@ -1605,8 +2030,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                       'Mostrar Íconos',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    subtitle: Text(
-                        'Muestra íconos junto al texto en los botones'),
+                    subtitle:
+                        Text('Muestra íconos junto al texto en los botones'),
                     value: _showIcons,
                     activeColor: primaryColor,
                     onChanged: (value) {
@@ -1742,6 +2167,69 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                     ),
                   ),
 
+                  Divider(),
+
+                  // Control de transparencia
+                  ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.amber[100],
+                      child: Icon(Icons.opacity, color: primaryColor),
+                    ),
+                    title: Text(
+                      'Transparencia',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text('Ajuste la opacidad de los botones'),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Transparente',
+                                style: TextStyle(color: Colors.grey[600])),
+                            Text('Medio',
+                                style: TextStyle(color: Colors.grey[600])),
+                            Text('Sólido',
+                                style: TextStyle(color: Colors.grey[600])),
+                          ],
+                        ),
+                        Slider(
+                          value: _buttonOpacity,
+                          min: 0.3,
+                          max: 1.0,
+                          divisions: 7,
+                          label: '${(_buttonOpacity * 100).toInt()}%',
+                          activeColor: primaryColor,
+                          onChanged: (value) {
+                            setState(() {
+                              _buttonOpacity = value;
+                            });
+                          },
+                        ),
+                        Center(
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: primaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Opacidad: ${(_buttonOpacity * 100).toInt()}%',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: primaryColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   SizedBox(height: 20),
 
                   // Vista previa de botón
@@ -1761,14 +2249,16 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                         ),
                       ],
                     ),
-                    child: ElevatedButton(
-                      onPressed: null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.blue,
-                        disabledForegroundColor: Colors.white,
-                        side: BorderSide(color: Colors.black, width: 3),
+                    child: Opacity(
+                      opacity: _buttonOpacity,
+                      child: ElevatedButton(
+                        onPressed: null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.blue,
+                          disabledForegroundColor: Colors.white,
+                          side: BorderSide(color: Colors.black, width: 3),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -1790,6 +2280,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                             ),
                           ),
                         ],
+                      ),
                       ),
                     ),
                   ),
@@ -1877,7 +2368,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                                   ),
                                   prefixIcon: Icon(Icons.edit_note),
                                 ),
-                                maxLength: 10, // Limitar longitud de abreviaturas
+                                maxLength:
+                                    10, // Limitar longitud de abreviaturas
                               ),
                             ),
                           ],
@@ -1962,32 +2454,57 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     required Widget child,
   }) {
     return Card(
-      elevation: 4,
+      elevation: 3,
+      shadowColor: primaryColor.withOpacity(0.2),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: primaryColor.withOpacity(0.1),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
-              color: primaryColor,
+              gradient: LinearGradient(
+                colors: [primaryLight.withOpacity(0.15), accentColor.withOpacity(0.1)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(15),
-                topRight: Radius.circular(15),
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+              border: Border(
+                bottom: BorderSide(
+                  color: primaryColor.withOpacity(0.15),
+                  width: 1.5,
+                ),
               ),
             ),
             child: Row(
               children: [
-                Icon(icon, color: Colors.white),
-                SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: primaryColor, size: 22),
+                ),
+                SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: primaryDark,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ],
@@ -2041,12 +2558,12 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
     }
   }
 
-  void _showEditDialog(BuildContext context, dynamic model, int index,
-      bool isTicketModel) {
-    TextEditingController priceController = TextEditingController(
-        text: model.pasajes[index]['precio'].toString());
-    TextEditingController nameController = TextEditingController(
-        text: model.pasajes[index]['nombre']);
+  void _showEditDialog(
+      BuildContext context, dynamic model, int index, bool isTicketModel) {
+    TextEditingController priceController =
+        TextEditingController(text: model.pasajes[index]['precio'].toString());
+    TextEditingController nameController =
+        TextEditingController(text: model.pasajes[index]['nombre']);
     String originalName = model.pasajes[index]['nombre'];
     bool isEditing = true;
 
@@ -2066,8 +2583,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
               title: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: isTicketModel ? Colors.blue[100] : Colors
-                        .red[100],
+                    backgroundColor:
+                        isTicketModel ? Colors.blue[100] : Colors.red[100],
                     child: Icon(currentIcon,
                         color: isTicketModel ? Colors.blue : Colors.red),
                   ),
@@ -2096,169 +2613,181 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
               content: SingleChildScrollView(
                 child: isEditing
                     ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Nombre actual: $originalName',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.grey[700]),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        labelText: 'Nuevo nombre',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        prefixIcon: Icon(Icons.edit),
-                      ),
-                      autofocus: true,
-                    ),
-                    SizedBox(height: 15),
-                    Text(
-                      'Precio actual: \$${NumberFormat('#,##0', 'es_ES').format(
-                          model.pasajes[index]['precio'])}',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.grey[700]),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: priceController,
-                      decoration: InputDecoration(
-                        labelText: 'Nuevo precio',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        prefixIcon: Icon(Icons.attach_money),
-                        prefixText: '\$',
-                        helperText: 'Ingrese el nuevo precio sin puntos ni comas',
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly
-                      ],
-                    ),
-                    SizedBox(height: 15),
-                    Text(
-                      'Seleccione un ícono:',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.grey[700]),
-                    ),
-                    SizedBox(height: 10),
-                    // Selección de íconos
-                    Container(
-                      height: 120,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: GridView.builder(
-                        padding: EdgeInsets.all(8),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4,
-                          mainAxisSpacing: 8,
-                          crossAxisSpacing: 8,
-                          childAspectRatio: 1,
-                        ),
-                        itemCount: _availableIcons.length,
-                        itemBuilder: (context, iconIndex) {
-                          final iconInfo = _availableIcons[iconIndex];
-                          final bool isSelected = currentIcon ==
-                              iconInfo['icon'];
-
-                          return InkWell(
-                            onTap: () {
-                              setState(() {
-                                currentIcon = iconInfo['icon'];
-                                currentIconName =
-                                    _getStringFromIcon(iconInfo['icon']);
-                              });
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: isSelected ? primaryColor.withOpacity(
-                                    0.2) : Colors.grey[200],
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Nombre actual: $originalName',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700]),
+                          ),
+                          SizedBox(height: 10),
+                          TextField(
+                            controller: nameController,
+                            decoration: InputDecoration(
+                              labelText: 'Nuevo nombre',
+                              border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                border: isSelected ? Border.all(
-                                    color: primaryColor, width: 2) : null,
                               ),
-                              child: Center(
-                                child: Icon(
-                                  iconInfo['icon'],
-                                  size: 24,
-                                  color: isSelected ? primaryColor : Colors
-                                      .grey[700],
-                                ),
-                              ),
+                              prefixIcon: Icon(Icons.edit),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                )
+                            autofocus: true,
+                          ),
+                          SizedBox(height: 15),
+                          Text(
+                            'Precio actual: \$${NumberFormat('#,##0', 'es_ES').format(model.pasajes[index]['precio'])}',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700]),
+                          ),
+                          SizedBox(height: 10),
+                          TextField(
+                            controller: priceController,
+                            decoration: InputDecoration(
+                              labelText: 'Nuevo precio',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              prefixIcon: Icon(Icons.attach_money),
+                              prefixText: '\$',
+                              helperText:
+                                  'Ingrese el nuevo precio sin puntos ni comas',
+                            ),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                          ),
+                          SizedBox(height: 15),
+                          Text(
+                            'Seleccione un ícono:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700]),
+                          ),
+                          SizedBox(height: 10),
+                          // Selección de íconos
+                          Container(
+                            height: 120,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: GridView.builder(
+                              padding: EdgeInsets.all(8),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 4,
+                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 8,
+                                childAspectRatio: 1,
+                              ),
+                              itemCount: _availableIcons.length,
+                              itemBuilder: (context, iconIndex) {
+                                final iconInfo = _availableIcons[iconIndex];
+                                final bool isSelected =
+                                    currentIcon == iconInfo['icon'];
+
+                                return InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      currentIcon = iconInfo['icon'];
+                                      currentIconName =
+                                          _getStringFromIcon(iconInfo['icon']);
+                                    });
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? primaryColor.withOpacity(0.2)
+                                          : Colors.grey[200],
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: isSelected
+                                          ? Border.all(
+                                              color: primaryColor, width: 2)
+                                          : null,
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        iconInfo['icon'],
+                                        size: 24,
+                                        color: isSelected
+                                            ? primaryColor
+                                            : Colors.grey[700],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      )
                     : Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.green),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.green[50],
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.green),
+                        ),
+                        child: Row(
                           children: [
-                            Text(
-                              'Nombre actualizado a:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              nameController.text,
-                              style: TextStyle(color: Colors.green[800]),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              'Precio actualizado a:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              '\$${NumberFormat('#,##0', 'es_ES').format(
-                                  double.parse(priceController.text))}',
-                              style: TextStyle(color: Colors.green[800]),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              'Ícono actualizado:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Row(
-                              children: [
-                                Icon(currentIcon, color: Colors.green[800]),
-                                SizedBox(width: 5),
-                                Text(
-                                  _availableIcons.firstWhere((
-                                      icon) => icon['icon'] == currentIcon,
-                                      orElse: () =>
-                                      {
-                                        'name': 'Desconocido'
-                                      })['name'],
-                                  style: TextStyle(color: Colors.green[800]),
-                                ),
-                              ],
+                            Icon(Icons.check_circle, color: Colors.green),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Nombre actualizado a:',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    nameController.text,
+                                    style: TextStyle(color: Colors.green[800]),
+                                  ),
+                                  SizedBox(height: 5),
+                                  Text(
+                                    'Precio actualizado a:',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    '\$${NumberFormat('#,##0', 'es_ES').format(double.parse(priceController.text))}',
+                                    style: TextStyle(color: Colors.green[800]),
+                                  ),
+                                  SizedBox(height: 5),
+                                  Text(
+                                    'Ícono actualizado:',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  Row(
+                                    children: [
+                                      Icon(currentIcon,
+                                          color: Colors.green[800]),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        _availableIcons.firstWhere(
+                                            (icon) =>
+                                                icon['icon'] == currentIcon,
+                                            orElse: () => {
+                                                  'name': 'Desconocido'
+                                                })['name'],
+                                        style:
+                                            TextStyle(color: Colors.green[800]),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
               ),
               actions: [
                 TextButton(
@@ -2278,8 +2807,8 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
                       ),
                     ),
                     onPressed: () {
-                      double newPrice = double.tryParse(priceController.text) ??
-                          0;
+                      double newPrice =
+                          double.tryParse(priceController.text) ?? 0;
                       String newName = nameController.text.trim();
 
                       // Validar datos antes de guardar
@@ -2373,6 +2902,7 @@ class _SettingsState extends State<Settings> with SingleTickerProviderStateMixin
       ),
     );
   }
+
 // Método para cargar el margen final del PDF
   Future<void> _loadPdfEndMargin() async {
     try {

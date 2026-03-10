@@ -56,8 +56,10 @@ class PdfReportGenerator {
     // Obtener el ID antes de agregar la página
     String ticketId = await _getTicketId();
 
-    // Obtener el día de la semana actual
-    String diaDeLaSemana = DateFormat('EEEE', 'es_ES').format(DateTime.now()).toUpperCase();
+    // IMPORTANTE: Obtener el día de la semana de la fecha del reporte (reportDate)
+    // NO usar DateTime.now() aquí, ya que el reporte debe reflejar el día de las transacciones
+    // Esto asegura que un cierre del miércoles se imprima como MIÉRCOLES, no como el día actual
+    String diaDeLaSemana = DateFormat('EEEE', 'es_ES').format(reportDate).toUpperCase();
 
     // Añadir página
     pdf.addPage(

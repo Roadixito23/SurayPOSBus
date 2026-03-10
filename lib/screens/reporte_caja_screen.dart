@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../models/ReporteCaja.dart';
 import '../services/pdf/pdfReport_generator.dart';
 import '../services/pdf/pdf_optimizer.dart';
@@ -36,6 +37,9 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
   late AnimationController _shimmerController;
   late AnimationController _sortIconController;
   late Animation<double> _sortIconTurns;
+
+  // Colores personalizados de botones
+  Map<String, Color> _buttonColors = {};
 
   @override
   void initState() {
@@ -79,7 +83,111 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     // Iniciar la precarga de recursos del PDF
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _preloadPdfResources();
+      _loadButtonColors();
     });
+  }
+
+  // Método para cargar colores personalizados de botones
+  Future<void> _loadButtonColors() async {
+    final prefs = await SharedPreferences.getInstance();
+    final Map<String, Color> colors = {};
+    
+    // Mapeo de índices a nombres de tarifas (igual que en home.dart)
+    final Map<int, String> indexToName = {
+      0: 'Público General',
+      1: 'Escolar General',
+      2: 'Adulto Mayor',
+      3: 'Int. hasta 15 Km',
+      4: 'Int. hasta 50 Km',
+      5: 'Escolar Intermedio',
+    };
+    
+    // Determinar si es domingo o día de semana
+    final today = DateTime.now();
+    final isSunday = today.weekday == DateTime.sunday;
+    final prefix = isSunday ? 'sunday' : 'weekday';
+    
+    // Cargar colores desde SharedPreferences
+    for (int i = 0; i < indexToName.length; i++) {
+      final key = 'button_colors_${prefix}_$i';
+      final colorJson = prefs.getString(key);
+      if (colorJson != null) {
+        try {
+          final Map<String, dynamic> colorData = json.decode(colorJson);
+          if (colorData.containsKey('bgRed') && 
+              colorData.containsKey('bgGreen') && 
+              colorData.containsKey('bgBlue')) {
+            final r = colorData['bgRed'] as int;
+            final g = colorData['bgGreen'] as int;
+            final b = colorData['bgBlue'] as int;
+            colors[indexToName[i]!] = Color.fromRGBO(r, g, b, 1.0);
+          }
+        } catch (e) {
+          print('Error cargando color para ${indexToName[i]}: $e');
+        }
+      }
+    }
+    
+    if (mounted) {
+      setState(() {
+        _buttonColors = colors;
+      });
+    }
+  }
+
+  // Método para obtener el color según el tipo de transacción
+  Color _getColorForTransaction(String nombre) {
+    // Si hay un color personalizado cargado, usarlo
+    if (_buttonColors.containsKey(nombre)) {
+      return _buttonColors[nombre]!;
+    }
+    
+    // Determinar si es domingo o día de semana para colores por defecto
+    final today = DateTime.now();
+    final isSunday = today.weekday == DateTime.sunday;
+    
+    // Colores por defecto (mismos que en home.dart)
+    if (isSunday) {
+      // Colores domingo (generalmente más grises/rojos)
+      if (nombre.contains('Público General')) {
+        return Colors.grey.shade400;
+      } else if (nombre.contains('Escolar General')) {
+        return Colors.red.shade400;
+      } else if (nombre.contains('Adulto Mayor')) {
+        return Colors.green.shade400;
+      } else if (nombre.contains('Int. hasta 15')) {
+        return Colors.red.shade400;
+      } else if (nombre.contains('Int. hasta 50')) {
+        return Colors.red.shade400;
+      } else if (nombre.contains('Escolar Intermedio')) {
+        return Colors.white;
+      }
+    } else {
+      // Colores de semana
+      if (nombre.contains('Público General')) {
+        return Colors.red.shade400;
+      } else if (nombre.contains('Escolar General')) {
+        return Colors.green.shade400;
+      } else if (nombre.contains('Adulto Mayor')) {
+        return Colors.blue.shade400;
+      } else if (nombre.contains('Int. hasta 15')) {
+        return Colors.blue.shade400;
+      } else if (nombre.contains('Int. hasta 50')) {
+        return Colors.green.shade400;
+      } else if (nombre.contains('Escolar Intermedio')) {
+        return Colors.white;
+      }
+    }
+    
+    // Para tipos adicionales que no están en los 6 principales
+    if (nombre.contains('Oferta')) {
+      return Colors.pink.shade400;
+    } else if (nombre.contains('Cargo')) {
+      return Colors.brown.shade400;
+    }
+    
+    // Color por defecto si no coincide con ningún tipo conocido
+    return AppTheme.turquoise;
   }
 
   @override
@@ -126,7 +234,11 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
       final generator = PdfReportGenerator();
       final transactions = reporteCaja.getOrderedTransactions();
       final total = reporteCaja.getTotal();
-      final reportDate = DateTime.now();
+      
+      // Determinar la fecha del reporte basándose en las transacciones
+      // Si todas las transacciones son del mismo día, usar esa fecha
+      // De lo contrario, usar la fecha actual
+      DateTime reportDate = _determineReportDate(transactions);
 
       // Generate the PDF and get the document (assuming it returns Uint8List now)
       final pdfBytes = await generator.generatePdf(transactions, total, reportDate);
@@ -341,6 +453,61 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
       });
 
       _showSnackBar('Error al limpiar reportes antiguos: $e', AppTheme.coral);
+    }
+  }
+
+  // NUEVO MÉTODO: Determinar la fecha del reporte basándose en las transacciones
+  // Este método garantiza que el cierre de caja se genere con la fecha correcta
+  // correspondiente a las transacciones, no a la fecha actual del sistema.
+  // Esto evita que un cierre de caja del miércoles se guarde como jueves.
+  DateTime _determineReportDate(List<Map<String, dynamic>> transactions) {
+    if (transactions.isEmpty) {
+      return DateTime.now();
+    }
+
+    // Obtener el día, mes y año de la primera transacción (no anulación)
+    Map<String, dynamic>? firstValidTransaction = transactions.firstWhere(
+      (t) => !t['nombre'].toString().startsWith('Anulación:'),
+      orElse: () => transactions.first,
+    );
+
+    String dia = firstValidTransaction['dia'] ?? DateFormat('dd').format(DateTime.now());
+    String mes = firstValidTransaction['mes'] ?? DateFormat('MM').format(DateTime.now());
+    String ano = firstValidTransaction['ano'] ?? DateTime.now().year.toString();
+
+    // Verificar si todas las transacciones son del mismo día
+    bool allSameDay = transactions.every((t) {
+      return t['dia'] == dia && 
+             t['mes'] == mes && 
+             (t['ano'] ?? ano) == ano;
+    });
+
+    if (allSameDay) {
+      // Todas las transacciones son del mismo día, usar esa fecha
+      try {
+        int year = int.parse(ano);
+        int month = int.parse(mes);
+        int day = int.parse(dia);
+        
+        // Usar la hora de la última transacción si está disponible
+        String? lastHora = transactions.last['hora'];
+        int hour = 23;
+        int minute = 59;
+        
+        if (lastHora != null && lastHora.contains(':')) {
+          List<String> timeParts = lastHora.split(':');
+          hour = int.tryParse(timeParts[0]) ?? hour;
+          minute = int.tryParse(timeParts[1]) ?? minute;
+        }
+        
+        return DateTime(year, month, day, hour, minute);
+      } catch (e) {
+        print('Error al parsear fecha de transacción: $e');
+        return DateTime.now();
+      }
+    } else {
+      // Transacciones de diferentes días, usar fecha actual
+      return DateTime.now();
     }
   }
 
@@ -860,6 +1027,13 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                     iconColor = Colors.red.shade400;
                     iconData = Icons.do_disturb_rounded;
                     bgColor = Colors.red.shade50;
+                  } else {
+                    // Obtener color según el tipo de transacción
+                    final nombre = transaction['nombre'] as String;
+                    final customColor = _getColorForTransaction(nombre);
+                    leftBarColor = customColor;
+                    iconColor = customColor;
+                    bgColor = customColor.withOpacity(0.08);
                   }
 
                   return Container(

@@ -1,4 +1,5 @@
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Servicio para integrar pagos con tarjeta vía SumUp Deep Link.
 ///
@@ -6,11 +7,17 @@ import 'package:url_launcher/url_launcher.dart';
 /// mediante un URI `sumupmerchant://pay/1.0` y recibe el resultado
 /// a través del callback `posbus://sumup-result`.
 class SumUpService {
-  static const String _affiliateKey =
+  static const String _defaultAffiliateKey =
       'sup_afk_BydGVQ41DbNaM3Mm441GRPxon06MIkXu';
   static const String _currency = 'CLP';
   static const String _callbackScheme = 'posbus';
   static const String _callbackHost = 'sumup-result';
+
+  /// Obtiene el affiliate key desde SharedPreferences o usa el valor por defecto
+  static Future<String> _getAffiliateKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('sumup_affiliate_key') ?? _defaultAffiliateKey;
+  }
 
   /// Abre la app de SumUp para cobrar [monto] con el [titulo] indicado.
   ///
@@ -20,12 +27,14 @@ class SumUpService {
     required double monto,
     required String titulo,
   }) async {
+    final affiliateKey = await _getAffiliateKey();
+    
     final uri = Uri(
       scheme: 'sumupmerchant',
       host: 'pay',
       path: '/1.0',
       queryParameters: {
-        'affiliate-key': _affiliateKey,
+        'affiliate-key': affiliateKey,
         'app-id': 'posbus',
         'amount': monto.toStringAsFixed(2),
         'currency': _currency,

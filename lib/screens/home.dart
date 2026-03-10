@@ -14,6 +14,7 @@ import '../models/ticket_model.dart';
 import '../models/sunday_ticket_model.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:provider/provider.dart';
 import '../services/pdf/generate_mo_ticket.dart';
 import '../models/ComprobanteModel.dart';
@@ -22,6 +23,7 @@ import '../services/closing/auto_closing_service.dart';
 import '../services/sumup_service.dart';
 import '../services/pago_storage_service.dart';
 import '../providers/sumup_result_notifier.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Importar los nuevos módulos
 import '../services/home/pending_transaction_service.dart';
@@ -33,6 +35,8 @@ import '../widgets/home/reprint_dialogs.dart';
 import '../widgets/home/home_app_bar_widgets.dart';
 import '../widgets/home/home_buttons.dart';
 import '../widgets/home/transaction_counter_widget.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager_android.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -44,7 +48,7 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   // Key para el Scaffold
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  
+
   // Servicios
   final PdfOptimizer pdfOptimizer = PdfOptimizer();
   final GenerateTicket generateTicket = GenerateTicket();
@@ -75,6 +79,9 @@ class _HomeState extends State<Home> {
   double _iconSpacing = 1.0;
   Map<String, IconData> _buttonIcons = {};
 
+  // Variables para colores personalizados de botones
+  Map<String, Map<String, Color>> _buttonColors = {};
+
   // Variables para la función de reimpresión
   Map<String, dynamic>? _lastTransaction;
   bool _isReprinting = false;
@@ -82,6 +89,10 @@ class _HomeState extends State<Home> {
   // Variables para pago con tarjeta SumUp
   bool _isWaitingSumUp = false;
   VoidCallback? _sumUpListener;
+  bool _sumUpEnabled = true;
+
+  // Variables para NFC
+  bool _isNfcAvailable = false;
 
   @override
   void initState() {
@@ -96,12 +107,15 @@ class _HomeState extends State<Home> {
 
     // Inicializar localización de forma asíncrona sin esperar
     _initializeLocalization();
-    
+
     _updateDay();
     _timer = Timer.periodic(Duration(milliseconds: 250), (timer) {
       _updateDay();
     });
     _isPhoneMode = true;
+
+    // Inicializar NFC
+    _checkNfcAvailability();
 
     // Realizar todas las operaciones pesadas en segundo plano después del primer frame
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -110,6 +124,8 @@ class _HomeState extends State<Home> {
         _loadLastTransaction(),
         _loadDisplayPreferences(),
         _loadIconSettings(),
+        _loadSumUpEnabled(),
+        _loadButtonColors(),
       ]);
 
       // Luego cargar recursos PDF y verificar transacciones
@@ -172,7 +188,8 @@ class _HomeState extends State<Home> {
     // Remover listener de SumUp si existe
     if (_sumUpListener != null) {
       try {
-        final notifier = Provider.of<SumUpResultNotifier>(context, listen: false);
+        final notifier =
+            Provider.of<SumUpResultNotifier>(context, listen: false);
         notifier.removeListener(_sumUpListener!);
       } catch (_) {}
       _sumUpListener = null;
@@ -196,6 +213,144 @@ class _HomeState extends State<Home> {
       _showIcons = prefs['showIcons'];
       _textSizeMultiplier = prefs['textSizeMultiplier'];
       _iconSpacing = prefs['iconSpacing'];
+    });
+  }
+
+  Future<void> _loadButtonColors() async {
+    final prefs = await SharedPreferences.getInstance();
+    final Map<String, Map<String, Color>> colors = {};
+
+    // Cargar colores para cada botón (weekday y sunday)
+    for (int i = 0; i < 6; i++) {
+      // Weekday
+      final keyWeekday = 'button_colors_weekday_$i';
+      final String? colorsJsonWeekday = prefs.getString(keyWeekday);
+      if (colorsJsonWeekday != null) {
+        final Map<String, dynamic> colorData = json.decode(colorsJsonWeekday);
+        colors['weekday_$i'] = {
+          'background': Color.fromRGBO(
+            colorData['bgRed'].toInt(),
+            colorData['bgGreen'].toInt(),
+            colorData['bgBlue'].toInt(),
+            1,
+          ),
+          'border': Color.fromRGBO(
+            colorData['borderRed'].toInt(),
+            colorData['borderGreen'].toInt(),
+            colorData['borderBlue'].toInt(),
+            1,
+          ),
+        };
+      }
+
+      // Sunday
+      final keySunday = 'button_colors_sunday_$i';
+      final String? colorsJsonSunday = prefs.getString(keySunday);
+      if (colorsJsonSunday != null) {
+        final Map<String, dynamic> colorData = json.decode(colorsJsonSunday);
+        colors['sunday_$i'] = {
+          'background': Color.fromRGBO(
+            colorData['bgRed'].toInt(),
+            colorData['bgGreen'].toInt(),
+            colorData['bgBlue'].toInt(),
+            1,
+          ),
+          'border': Color.fromRGBO(
+            colorData['borderRed'].toInt(),
+            colorData['borderGreen'].toInt(),
+            colorData['borderBlue'].toInt(),
+            1,
+          ),
+        };
+      }
+    }
+
+    setState(() {
+      _buttonColors = colors;
+    });
+  }
+
+  // Método helper para obtener el color de fondo de un botón
+  Color _getButtonBackgroundColor(int index, bool isSunday) {
+    final key = isSunday ? 'sunday_$index' : 'weekday_$index';
+    if (_buttonColors.containsKey(key) &&
+        _buttonColors[key]!.containsKey('background')) {
+      return _buttonColors[key]!['background']!;
+    }
+
+    // Colores por defecto si no se han configurado
+    if (isSunday) {
+      switch (index) {
+        case 0:
+          return Colors.grey.shade400;
+        case 1:
+          return Colors.red.shade400;
+        case 2:
+          return Colors.green.shade400;
+        case 3:
+          return Colors.red.shade400;
+        case 4:
+          return Colors.red.shade400;
+        case 5:
+          return Colors.white;
+        default:
+          return Colors.grey;
+      }
+    } else {
+      switch (index) {
+        case 0:
+          return Colors.red.shade400;
+        case 1:
+          return Colors.green.shade400;
+        case 2:
+          return Colors.blue.shade400;
+        case 3:
+          return Colors.blue.shade400;
+        case 4:
+          return Colors.green.shade400;
+        case 5:
+          return Colors.white;
+        default:
+          return Colors.grey;
+      }
+    }
+  }
+
+  // Método helper para obtener el color de borde de un botón
+  Color _getButtonBorderColor(int index, bool isSunday) {
+    final key = isSunday ? 'sunday_$index' : 'weekday_$index';
+    if (_buttonColors.containsKey(key) &&
+        _buttonColors[key]!.containsKey('border')) {
+      return _buttonColors[key]!['border']!;
+    }
+
+    // Colores por defecto si no se han configurado
+    if (isSunday) {
+      switch (index) {
+        case 0:
+          return Colors.blue.shade300;
+        case 1:
+          return Colors.pink.shade300;
+        case 2:
+          return Colors.yellow.shade300;
+        case 3:
+          return Colors.pink.shade300;
+        case 4:
+          return Colors.pink.shade300;
+        case 5:
+          return Colors.black;
+        default:
+          return Colors.black;
+      }
+    } else {
+      return Colors.black;
+    }
+  }
+
+  Future<void> _loadSumUpEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _sumUpEnabled = prefs.getBool('sumUpEnabled') ?? true;
     });
   }
 
@@ -228,13 +383,34 @@ class _HomeState extends State<Home> {
     });
   }
 
+  // ==================== MÉTODOS DE COOLDOWN ====================
+  
+  void _activateCooldown() {
+    if (mounted) {
+      setState(() {
+        _isButtonDisabled = true;
+      });
+      Future.delayed(Duration(seconds: 1), () {
+        if (mounted) {
+          setState(() {
+            _isButtonDisabled = false;
+          });
+        }
+      });
+    }
+  }
+
   // ==================== MÉTODOS DE NAVEGACIÓN ====================
 
   void _navigateToReports() {
+    _activateCooldown();
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => ReporteCajaScreen()),
-    );
+    ).then((_) {
+      // Reactivar cooldown al volver de reportes
+      _activateCooldown();
+    });
   }
 
   void _logout() {
@@ -291,7 +467,7 @@ class _HomeState extends State<Home> {
                   ),
                   SizedBox(height: 2),
                   Text(
-                    'V.02.03.26',
+                    'V.05.03.26',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
@@ -323,27 +499,11 @@ class _HomeState extends State<Home> {
                   title: Text('Estadísticas'),
                   onTap: () {
                     Navigator.pop(context);
+                    _activateCooldown();
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                          builder: (_) => StatisticsScreen()),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.inventory_2_rounded,
-                      color: Colors.orange.shade700),
-                  title: Text('Cargo'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CargoScreen(
-                          onTransactionComplete: _saveLastTransaction,
-                        ),
-                      ),
-                    );
+                      MaterialPageRoute(builder: (_) => StatisticsScreen()),
+                    ).then((_) => _activateCooldown());
                   },
                 ),
                 Divider(indent: 16, endIndent: 16),
@@ -355,10 +515,11 @@ class _HomeState extends State<Home> {
                   title: Text('Recuperación de Reportes'),
                   onTap: () {
                     Navigator.pop(context);
+                    _activateCooldown();
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => RecoveryReport()),
-                    );
+                    ).then((_) => _activateCooldown());
                   },
                 ),
                 ListTile(
@@ -367,10 +528,11 @@ class _HomeState extends State<Home> {
                   title: Text('Copias de Seguridad'),
                   onTap: () {
                     Navigator.pop(context);
+                    _activateCooldown();
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => BackupScreen()),
-                    );
+                    ).then((_) => _activateCooldown());
                   },
                 ),
                 Divider(indent: 16, endIndent: 16),
@@ -403,6 +565,7 @@ class _HomeState extends State<Home> {
   }
 
   void _navigateToSettings() async {
+    _activateCooldown();
     final settingsChanged = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (context) => Settings()),
@@ -411,8 +574,12 @@ class _HomeState extends State<Home> {
     if (settingsChanged == true) {
       print('Settings changed, reloading preferences');
       await _loadDisplayPreferences();
+      await _loadSumUpEnabled();
+      await _loadButtonColors();
       setState(() {});
     }
+    // Reactivar cooldown al volver de settings
+    _activateCooldown();
   }
 
   // ==================== MÉTODOS DE GENERACIÓN DE TICKETS ====================
@@ -423,7 +590,8 @@ class _HomeState extends State<Home> {
     final autoClosingService = AutoClosingService();
 
     // Verificar y realizar auto-cierre si hay cambio de día
-    final didAutoClose = await autoClosingService.checkAndAutoClose(reporteCaja);
+    final didAutoClose =
+        await autoClosingService.checkAndAutoClose(reporteCaja);
     if (didAutoClose && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -532,7 +700,15 @@ class _HomeState extends State<Home> {
   /// Muestra un diálogo para elegir entre Efectivo y Tarjeta.
   /// Si se elige Efectivo, genera el ticket normalmente.
   /// Si se elige Tarjeta, inicia el flujo SumUp Deep Link.
-  void _showPaymentMethodDialog(String tipo, double valor, bool isCorrespondencia) {
+  void _showPaymentMethodDialog(
+      String tipo, double valor, bool isCorrespondencia) {
+    // Si SumUp está deshabilitado, generar ticket directamente con efectivo
+    if (!_sumUpEnabled) {
+      _generateTicket(tipo, valor, isCorrespondencia);
+      return;
+    }
+
+    // Si SumUp está habilitado, mostrar el diálogo de selección de método de pago
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -577,7 +753,9 @@ class _HomeState extends State<Home> {
                       height: 56,
                       child: ElevatedButton.icon(
                         icon: Icon(Icons.attach_money, size: 24),
-                        label: Text('Efectivo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        label: Text('Efectivo',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green.shade700,
                           foregroundColor: Colors.white,
@@ -593,29 +771,34 @@ class _HomeState extends State<Home> {
                       ),
                     ),
                   ),
-                  SizedBox(width: 12),
-                  // Botón Tarjeta
-                  Expanded(
-                    child: SizedBox(
-                      height: 56,
-                      child: ElevatedButton.icon(
-                        icon: Icon(Icons.credit_card, size: 24),
-                        label: Text('Tarjeta', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  // Botón Tarjeta - solo si está habilitado
+                  if (_sumUpEnabled) ...[
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: ElevatedButton.icon(
+                          icon: Icon(Icons.credit_card, size: 24),
+                          label: Text('Tarjeta',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
                           ),
-                          elevation: 2,
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _generateTicketConTarjeta(
+                                tipo, valor, isCorrespondencia);
+                          },
                         ),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _generateTicketConTarjeta(tipo, valor, isCorrespondencia);
-                        },
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ],
@@ -688,7 +871,8 @@ class _HomeState extends State<Home> {
                   children: [
                     Icon(Icons.error_outline, color: Colors.white),
                     SizedBox(width: 8),
-                    Expanded(child: Text('Pago con tarjeta rechazado o cancelado')),
+                    Expanded(
+                        child: Text('Pago con tarjeta rechazado o cancelado')),
                   ],
                 ),
                 backgroundColor: Colors.red.shade700,
@@ -731,9 +915,23 @@ class _HomeState extends State<Home> {
     }
   }
 
+  // ==================== MÉTODOS DE NFC ====================
+  
+  Future<void> _checkNfcAvailability() async {
+    bool available = await NfcManager.instance.isAvailable();
+    if (mounted) {
+      setState(() {
+        _isNfcAvailable = available;
+      });
+    }
+  }
+
   // ==================== MÉTODOS DE REIMPRESIÓN ====================
 
   void _handleReprint() async {
+    // Activar cooldown al abrir diálogo
+    _activateCooldown();
+    
     // Si no es cargo y ya reimpreso, bloqueo
     if (_hasReprinted &&
         _lastTransaction != null &&
@@ -757,9 +955,16 @@ class _HomeState extends State<Home> {
       return;
     }
 
-    // Pedir contraseña
-    bool ok =
-        await showReprintPasswordDialog(context, HomeHelpers.loadPassword);
+    // Pedir contraseña (ahora con NFC)
+    bool ok = await showReprintPasswordDialog(
+      context, 
+      HomeHelpers.loadPassword,
+      _isNfcAvailable,
+    );
+    
+    // Reactivar cooldown al cerrar diálogo
+    _activateCooldown();
+    
     if (!ok) return;
 
     // Cargo → muestro siempre opciones Cliente/Carga/Ambas
@@ -1128,54 +1333,6 @@ class _HomeState extends State<Home> {
                 padding: EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    if (reporteCaja.hasPendingOldTransactions())
-                      Container(
-                        margin: EdgeInsets.only(bottom: 16),
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          border: Border.all(color: Colors.orange.shade300),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.warning_amber_rounded,
-                                color: Colors.orange),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Hay cajas pendientes de cierre',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orange.shade800,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Se recomienda cerrar las cajas pendientes',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(dialogContext).pop();
-                                _navigateToReports();
-                              },
-                              style: TextButton.styleFrom(
-                                backgroundColor: Colors.orange.shade100,
-                                foregroundColor: Colors.orange.shade900,
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
-                              ),
-                              child: Text('Ir a Reportes'),
-                            ),
-                          ],
-                        ),
-                      ),
                     Expanded(
                       child: ListView.builder(
                         itemCount: offerEntries.length,
@@ -1369,18 +1526,25 @@ class _HomeState extends State<Home> {
           },
         ),
       ),
-    );
+    ).then((_) {
+      // Reactivar cooldown al volver de cargo
+      _activateCooldown();
+    });
   }
 
   // ==================== DIÁLOGO DE ANULAR VENTA ====================
 
   Future<void> _showPasswordDialog() async {
+    _activateCooldown();
     await showPasswordDialog(
       context,
       HomeHelpers.loadPassword,
       _cancelLastTransaction,
       _hasAnulado,
+      _isNfcAvailable,
     );
+    // Reactivar cooldown al cerrar diálogo
+    _activateCooldown();
   }
 
   Future<void> _cancelLastTransaction() async {
@@ -1460,10 +1624,58 @@ class _HomeState extends State<Home> {
                   onShowOfferDialog: _showOfferDialog,
                   onShowPasswordDialog: _showPasswordDialog,
                   onHandleReprint: _handleReprint,
-                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  onOpenDrawer: () {
+                    _activateCooldown();
+                    _scaffoldKey.currentState?.openDrawer();
+                  },
+                ),
+                SizedBox(width: 10),
+                Consumer<ComprobanteModel>(
+                  builder: (context, comprobanteModel, child) {
+                    // Formatear el número con ceros a la izquierda (6 dígitos)
+                    // Mostrar el próximo número a imprimir (+1)
+                    final formattedNumber = (comprobanteModel.comprobanteNumber + 1)
+                        .toString()
+                        .padLeft(6, '0');
+                    return Container(
+                      height: 40,
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 2,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.receipt_long,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            formattedNumber,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 if (hasPendingDays) ...[
-                  SizedBox(width: 6),
+                  SizedBox(width: 10),
                   AnimatedContainer(
                     duration: Duration(milliseconds: 300),
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1514,7 +1726,10 @@ class _HomeState extends State<Home> {
                   onShowOfferDialog: _showOfferDialog,
                   onShowPasswordDialog: _showPasswordDialog,
                   onHandleReprint: _handleReprint,
-                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  onOpenDrawer: () {
+                    _activateCooldown();
+                    _scaffoldKey.currentState?.openDrawer();
+                  },
                 ),
                 SizedBox(width: 10),
                 HomeAppBarWidgets.buildAppBarSlotWidget(
@@ -1530,7 +1745,10 @@ class _HomeState extends State<Home> {
                   onShowOfferDialog: _showOfferDialog,
                   onShowPasswordDialog: _showPasswordDialog,
                   onHandleReprint: _handleReprint,
-                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  onOpenDrawer: () {
+                    _activateCooldown();
+                    _scaffoldKey.currentState?.openDrawer();
+                  },
                 ),
                 SizedBox(width: 10),
                 HomeAppBarWidgets.buildAppBarSlotWidget(
@@ -1546,7 +1764,10 @@ class _HomeState extends State<Home> {
                   onShowOfferDialog: _showOfferDialog,
                   onShowPasswordDialog: _showPasswordDialog,
                   onHandleReprint: _handleReprint,
-                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  onOpenDrawer: () {
+                    _activateCooldown();
+                    _scaffoldKey.currentState?.openDrawer();
+                  },
                 ),
               ],
             ),
@@ -1574,7 +1795,7 @@ class _HomeState extends State<Home> {
           Column(
             children: [
               // Espaciador para la AppBar
-              SizedBox(height:90),
+              SizedBox(height: 90),
               // Banner de advertencia si hay días pendientes
               if (hasPendingDays)
                 Container(
@@ -1587,21 +1808,11 @@ class _HomeState extends State<Home> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Hay ${reporteCaja.getOldestPendingDays()} días con ventas sin cerrar',
+                          'Hay un dia con ventas sin cerrar',
                           style: TextStyle(
                               color: Colors.red.shade900,
                               fontWeight: FontWeight.bold),
                         ),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade700,
-                          foregroundColor: Colors.white,
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        onPressed: _navigateToReports,
-                        child: Text('Cerrar Caja'),
                       ),
                     ],
                   ),
@@ -1619,45 +1830,6 @@ class _HomeState extends State<Home> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             TransactionCounterWidget(),
-                            Consumer<ComprobanteModel>(
-                              builder: (context, comprobanteModel, child) {
-                                return Container(
-                                  height: 36,
-                                  width: 100,
-                                  padding: EdgeInsets.symmetric(horizontal: 15),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange,
-                                    borderRadius: BorderRadius.circular(13),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black26,
-                                        blurRadius: 2,
-                                        offset: Offset(0, 1),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.receipt_long,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                      SizedBox(width: 5),
-                                      Text(
-                                        '${comprobanteModel.comprobanteNumber}',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 20,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
                           ],
                         ),
                       ),
@@ -1784,10 +1956,9 @@ class _HomeState extends State<Home> {
                               text: pasajes[0]['nombre'],
                               icon: Icons.people,
                               backgroundColor:
-                                  _switchValue ? Colors.grey : Colors.red,
-                              borderColor: _switchValue
-                                  ? Colors.blueAccent
-                                  : Colors.black,
+                                  _getButtonBackgroundColor(0, _switchValue),
+                              borderColor:
+                                  _getButtonBorderColor(0, _switchValue),
                               onPressed: () {
                                 _showPaymentMethodDialog(pasajes[0]['nombre'],
                                     pasajes[0]['precio'], false);
@@ -1806,10 +1977,9 @@ class _HomeState extends State<Home> {
                               text: pasajes[4]['nombre'],
                               icon: Icons.map,
                               backgroundColor:
-                                  _switchValue ? Colors.red : Colors.green,
-                              borderColor: _switchValue
-                                  ? Colors.pinkAccent
-                                  : Colors.black,
+                                  _getButtonBackgroundColor(4, _switchValue),
+                              borderColor:
+                                  _getButtonBorderColor(4, _switchValue),
                               onPressed: () {
                                 _showPaymentMethodDialog(pasajes[4]['nombre'],
                                     pasajes[4]['precio'], false);
@@ -1836,10 +2006,9 @@ class _HomeState extends State<Home> {
                               text: pasajes[1]['nombre'],
                               icon: Icons.school,
                               backgroundColor:
-                                  _switchValue ? Colors.red : Colors.green,
-                              borderColor: _switchValue
-                                  ? Colors.pinkAccent
-                                  : Colors.black,
+                                  _getButtonBackgroundColor(1, _switchValue),
+                              borderColor:
+                                  _getButtonBorderColor(1, _switchValue),
                               onPressed: () {
                                 _showPaymentMethodDialog(pasajes[1]['nombre'],
                                     pasajes[1]['precio'], false);
@@ -1858,10 +2027,9 @@ class _HomeState extends State<Home> {
                               text: pasajes[3]['nombre'],
                               icon: Icons.directions_bus,
                               backgroundColor:
-                                  _switchValue ? Colors.red : Colors.blue,
-                              borderColor: _switchValue
-                                  ? Colors.pinkAccent
-                                  : Colors.black,
+                                  _getButtonBackgroundColor(3, _switchValue),
+                              borderColor:
+                                  _getButtonBorderColor(3, _switchValue),
                               onPressed: () {
                                 _showPaymentMethodDialog(pasajes[3]['nombre'],
                                     pasajes[3]['precio'], false);
@@ -1888,10 +2056,9 @@ class _HomeState extends State<Home> {
                               text: pasajes[2]['nombre'],
                               icon: Icons.elderly,
                               backgroundColor:
-                                  _switchValue ? Colors.green : Colors.blue,
-                              borderColor: _switchValue
-                                  ? Colors.yellowAccent
-                                  : Colors.black,
+                                  _getButtonBackgroundColor(2, _switchValue),
+                              borderColor:
+                                  _getButtonBorderColor(2, _switchValue),
                               onPressed: () {
                                 _showPaymentMethodDialog(pasajes[2]['nombre'],
                                     pasajes[2]['precio'], false);
@@ -1912,9 +2079,9 @@ class _HomeState extends State<Home> {
                                   : 'Escolar Intermedio',
                               icon: Icons.school_outlined,
                               backgroundColor:
-                                  _switchValue ? Colors.white : Colors.white,
+                                  _getButtonBackgroundColor(5, _switchValue),
                               borderColor:
-                                  _switchValue ? Colors.black : Colors.black,
+                                  _getButtonBorderColor(5, _switchValue),
                               textColor: Colors.black,
                               onPressed: () {
                                 if (pasajes.length > 5) {
