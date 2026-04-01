@@ -9,10 +9,10 @@ class TransactionCounterWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 50,
-      width: 150,
+      height: 40,
+      width: 120,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
             color: Colors.black26,
@@ -31,8 +31,8 @@ class TransactionCounterWidget extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Color(0xFF1900A2),
                     borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(13),
-                      bottomLeft: Radius.circular(13),
+                      topLeft: Radius.circular(10),
+                      bottomLeft: Radius.circular(10),
                     ),
                   ),
                 ),
@@ -42,8 +42,8 @@ class TransactionCounterWidget extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Color(0xFFFF0C00),
                     borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(13),
-                      bottomRight: Radius.circular(13),
+                      topRight: Radius.circular(10),
+                      bottomRight: Radius.circular(10),
                     ),
                   ),
                 ),
@@ -52,7 +52,7 @@ class TransactionCounterWidget extends StatelessWidget {
           ),
           // Contador de transacciones (lado izquierdo - azul)
           Positioned(
-            left: 13,
+            left: 10,
             child: Consumer<ReporteCaja>(
               builder: (context, reporteCaja, child) {
                 DateTime today = DateTime.now();
@@ -82,7 +82,7 @@ class TransactionCounterWidget extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 23,
+                      fontSize: 18,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -92,7 +92,7 @@ class TransactionCounterWidget extends StatelessWidget {
           ),
           // Contador de anulaciones (lado derecho - rojo)
           Positioned(
-            right: 13,
+            right: 10,
             child: Consumer<ReporteCaja>(
               builder: (context, reporteCaja, child) {
                 DateTime today = DateTime.now();
@@ -122,7 +122,7 @@ class TransactionCounterWidget extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 23,
+                      fontSize: 18,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -153,8 +153,8 @@ class TransactionCounterWidget extends StatelessWidget {
               return AnimatedContainer(
                 duration: Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
-                width: 60,
-                height: 40,
+                width: 48,
+                height: 32,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.green,
@@ -185,7 +185,7 @@ class TransactionCounterWidget extends StatelessWidget {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: 14,
                       ),
                       textAlign: TextAlign.center,
                     ),

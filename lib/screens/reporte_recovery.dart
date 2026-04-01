@@ -17,9 +17,6 @@ class RecoveryReport extends StatefulWidget {
 }
 
 class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStateMixin {
-  // Variables para gestionar la retención de archivos
-  final int _retentionPeriodDays = 30; // Período de retención: 30 días
-
   List<FileSystemEntity> pdfFiles = [];
   bool isLoading = true;
   String searchQuery = '';
@@ -100,29 +97,17 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
     try {
       final directory = await getApplicationDocumentsDirectory();
       final List<FileSystemEntity> files = directory.listSync();
-      final DateTime cutoffDate = DateTime.now().subtract(Duration(days: _retentionPeriodDays));
 
       // Filtrar por archivos PDF
-      final List<FileSystemEntity> allPdfFiles = files.where((file) => file.path.endsWith('.pdf')).toList();
-
-      // Filtrar archivos más antiguos que el período de retención
-      List<FileSystemEntity> filesToKeep = [];
-
-      for (var file in allPdfFiles) {
-        final fileStats = File(file.path).statSync();
-        final fileDate = fileStats.modified;
-
-        if (fileDate.isAfter(cutoffDate) || fileDate.isAtSameMomentAs(cutoffDate)) {
-          // Archivo dentro del período de retención
-          filesToKeep.add(file);
-        }
-      }
+      final List<FileSystemEntity> allPdfFiles =
+          files.where((file) => file.path.endsWith('.pdf')).toList();
 
       // Ordenar por fecha de modificación (más reciente primero)
-      filesToKeep.sort((a, b) => File(b.path).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()));
+      allPdfFiles.sort((a, b) =>
+          File(b.path).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()));
 
       setState(() {
-        pdfFiles = filesToKeep;
+        pdfFiles = allPdfFiles;
         isLoading = false;
       });
     } catch (e) {
@@ -218,35 +203,6 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
       case 6: return "Sábado";
       case 7: return "Domingo";
       default: return "";
-    }
-  }
-
-  // Calcular los días restantes antes de la eliminación del archivo
-  int _getDaysRemainingBeforeDeletion(FileSystemEntity file) {
-    try {
-      final fileStats = File(file.path).statSync();
-      final creationDate = fileStats.modified;
-      final expirationDate = creationDate.add(Duration(days: _retentionPeriodDays));
-      final now = DateTime.now();
-
-      // Calcular la diferencia en días
-      final daysRemaining = expirationDate.difference(now).inDays;
-
-      // Asegurarse de que no devuelva valores negativos
-      return daysRemaining > 0 ? daysRemaining : 0;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  // Obtener el color para el indicador de tiempo restante
-  Color _getTimeRemainingColor(int daysRemaining) {
-    if (daysRemaining > 7) {
-      return AppTheme.turquoise; // Más de 1 semana: turquesa
-    } else if (daysRemaining > 3) {
-      return AppTheme.coral.withOpacity(0.7); // Entre 3-7 días: coral con opacidad
-    } else {
-      return AppTheme.coral; // Menos de 3 días: coral
     }
   }
 
@@ -568,7 +524,6 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
                         final originalFileName = file.path.split('/').last;
                         final formattedFileName = _formatFileName(file);
                         final fileNumber = _extractFileNumber(originalFileName);
-                        final daysRemaining = _getDaysRemainingBeforeDeletion(file);
 
                         // Crear animación escalonada
                         final Animation<double> animation = CurvedAnimation(
@@ -759,42 +714,6 @@ class _RecoveryReportState extends State<RecoveryReport> with TickerProviderStat
                                               ),
                                             ],
                                           ),
-                                          SizedBox(height: 8),
-
-                                          // Días para expiración
-                                          Container(
-                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: _getTimeRemainingColor(daysRemaining).withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(
-                                                color: _getTimeRemainingColor(daysRemaining),
-                                                width: 1,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  Icons.timer,
-                                                  size: 14,
-                                                  color: _getTimeRemainingColor(daysRemaining),
-                                                ),
-                                                SizedBox(width: 4),
-                                                Text(
-                                                  daysRemaining > 0
-                                                      ? 'Expira en $daysRemaining días'
-                                                      : 'Expira hoy',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: _getTimeRemainingColor(daysRemaining),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-
                                           SizedBox(height: 8),
 
                                           // Fecha y tamaño

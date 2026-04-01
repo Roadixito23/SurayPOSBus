@@ -319,7 +319,7 @@ class CargoTicketGenerator {
       await Printing.layoutPdf(onLayout: (_) => cargaPdf);
 
       // Add transaction to report
-      reporteCaja.receiveCargoData(destinatario, precio, ticketId);
+      await reporteCaja.receiveCargoData(destinatario, precio, ticketId);
     } catch (e) {
       print('Error generating cargo PDF: $e');
       // Clear resources in case of error

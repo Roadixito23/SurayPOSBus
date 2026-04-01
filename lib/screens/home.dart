@@ -28,7 +28,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 // Importar los nuevos módulos
 import '../services/home/pending_transaction_service.dart';
 import '../services/home/resource_preloader.dart';
-import '../services/home/maintenance_service.dart';
 import '../services/home/home_helpers.dart';
 import '../widgets/home/password_dialogs.dart';
 import '../widgets/home/reprint_dialogs.dart';
@@ -161,8 +160,6 @@ class _HomeState extends State<Home> {
           },
         );
 
-        // Ejecutar limpieza de reportes antiguos al iniciar
-        await MaintenanceService.performMaintenanceTasks();
       } catch (e) {
         print('Error en precarga de recursos: $e');
       }
@@ -232,7 +229,7 @@ class _HomeState extends State<Home> {
             colorData['bgRed'].toInt(),
             colorData['bgGreen'].toInt(),
             colorData['bgBlue'].toInt(),
-            1,
+            (colorData['bgOpacity'] as num?)?.toDouble() ?? 0.70,
           ),
           'border': Color.fromRGBO(
             colorData['borderRed'].toInt(),
@@ -253,7 +250,34 @@ class _HomeState extends State<Home> {
             colorData['bgRed'].toInt(),
             colorData['bgGreen'].toInt(),
             colorData['bgBlue'].toInt(),
+            (colorData['bgOpacity'] as num?)?.toDouble() ?? 0.70,
+          ),
+          'border': Color.fromRGBO(
+            colorData['borderRed'].toInt(),
+            colorData['borderGreen'].toInt(),
+            colorData['borderBlue'].toInt(),
             1,
+          ),
+        };
+      }
+    }
+
+    setState(() {
+      _buttonColors = colors;
+    });
+
+    // Cargar colores para botones OTROS (oferta=0, cargo=1)
+    for (int i = 0; i < 2; i++) {
+      final keyOtros = 'button_colors_otros_$i';
+      final String? colorsJsonOtros = prefs.getString(keyOtros);
+      if (colorsJsonOtros != null) {
+        final Map<String, dynamic> colorData = json.decode(colorsJsonOtros);
+        colors['otros_$i'] = {
+          'background': Color.fromRGBO(
+            colorData['bgRed'].toInt(),
+            colorData['bgGreen'].toInt(),
+            colorData['bgBlue'].toInt(),
+            (colorData['bgOpacity'] as num?)?.toDouble() ?? 0.70,
           ),
           'border': Color.fromRGBO(
             colorData['borderRed'].toInt(),
@@ -282,36 +306,36 @@ class _HomeState extends State<Home> {
     if (isSunday) {
       switch (index) {
         case 0:
-          return Colors.grey.shade400;
+          return Colors.grey.shade400.withOpacity(0.70);
         case 1:
-          return Colors.red.shade400;
+          return Colors.red.shade400.withOpacity(0.70);
         case 2:
-          return Colors.green.shade400;
+          return Colors.green.shade400.withOpacity(0.70);
         case 3:
-          return Colors.red.shade400;
+          return Colors.red.shade400.withOpacity(0.70);
         case 4:
-          return Colors.red.shade400;
+          return Colors.red.shade400.withOpacity(0.70);
         case 5:
-          return Colors.white;
+          return Colors.white.withOpacity(0.70);
         default:
-          return Colors.grey;
+          return Colors.grey.withOpacity(0.70);
       }
     } else {
       switch (index) {
         case 0:
-          return Colors.red.shade400;
+          return Colors.red.shade400.withOpacity(0.70);
         case 1:
-          return Colors.green.shade400;
+          return Colors.green.shade400.withOpacity(0.70);
         case 2:
-          return Colors.blue.shade400;
+          return Colors.blue.shade400.withOpacity(0.70);
         case 3:
-          return Colors.blue.shade400;
+          return Colors.blue.shade400.withOpacity(0.70);
         case 4:
-          return Colors.green.shade400;
+          return Colors.green.shade400.withOpacity(0.70);
         case 5:
-          return Colors.white;
+          return Colors.white.withOpacity(0.70);
         default:
-          return Colors.grey;
+          return Colors.grey.withOpacity(0.70);
       }
     }
   }
@@ -345,6 +369,24 @@ class _HomeState extends State<Home> {
     } else {
       return Colors.black;
     }
+  }
+
+  Color _getOtrosButtonBackgroundColor(int index) {
+    final key = 'otros_$index';
+    if (_buttonColors.containsKey(key) &&
+        _buttonColors[key]!.containsKey('background')) {
+      return _buttonColors[key]!['background']!;
+    }
+    return Colors.orange.withOpacity(0.70);
+  }
+
+  Color _getOtrosButtonBorderColor(int index) {
+    final key = 'otros_$index';
+    if (_buttonColors.containsKey(key) &&
+        _buttonColors[key]!.containsKey('border')) {
+      return _buttonColors[key]!['border']!;
+    }
+    return Colors.black;
   }
 
   Future<void> _loadSumUpEnabled() async {
@@ -432,6 +474,29 @@ class _HomeState extends State<Home> {
     );
   }
 
+  Widget _buildSectionHeader(String title) {
+    return Container(
+      height: 20,
+      padding: EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.45),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.white70,
+            letterSpacing: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
       child: Column(
@@ -467,7 +532,7 @@ class _HomeState extends State<Home> {
                   ),
                   SizedBox(height: 2),
                   Text(
-                    'V.05.03.26',
+                    'V01.04.26',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
@@ -640,10 +705,49 @@ class _HomeState extends State<Home> {
     );
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
 
-    try {
-      final comprobanteModel =
-          Provider.of<ComprobanteModel>(context, listen: false);
+    final comprobanteModel =
+        Provider.of<ComprobanteModel>(context, listen: false);
 
+    // Incrementar comprobante ANTES de cualquier escritura
+    await comprobanteModel.incrementComprobante();
+    final String currentComprobante = comprobanteModel.formattedComprobante;
+
+    // ── Registro en caja (crítico, independiente de la impresión) ──────────
+    try {
+      await reporteCaja.receiveData(tipo, valor, currentComprobante);
+    } catch (e) {
+      print('Error crítico guardando en caja: $e');
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al guardar venta. Contacte soporte.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        ),
+      );
+      setState(() {
+        _isButtonDisabled = false;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Actualizar fecha de última transacción y estado local
+    await autoClosingService.updateLastTransactionDate();
+
+    setState(() {
+      _lastTransaction = {
+        'nombre': tipo,
+        'valor': valor,
+        'switchValue': _switchValue,
+        'comprobante': currentComprobante,
+      };
+    });
+
+    await _saveLastTransaction(_lastTransaction!);
+
+    // ── Impresión (independiente; un fallo no revierte la caja) ────────────
+    try {
       await generateTicket.generateTicketPdf(
         context,
         valor,
@@ -651,24 +755,8 @@ class _HomeState extends State<Home> {
         tipo,
         comprobanteModel,
         false,
+        skipIncrement: true,
       );
-
-      String currentComprobante = comprobanteModel.formattedComprobante;
-      reporteCaja.receiveData(tipo, valor, currentComprobante);
-
-      // Actualizar fecha de última transacción
-      await autoClosingService.updateLastTransactionDate();
-
-      setState(() {
-        _lastTransaction = {
-          'nombre': tipo,
-          'valor': valor,
-          'switchValue': _switchValue,
-          'comprobante': currentComprobante,
-        };
-      });
-
-      await _saveLastTransaction(_lastTransaction!);
 
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -679,12 +767,13 @@ class _HomeState extends State<Home> {
         ),
       );
     } catch (e) {
-      print('Error generando ticket: $e');
+      print('Error de impresión: $e');
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al generar ticket'),
-          backgroundColor: Colors.red,
+          content: Text('Venta guardada. Error al imprimir ticket.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
         ),
       );
     } finally {
@@ -700,11 +789,11 @@ class _HomeState extends State<Home> {
   /// Muestra un diálogo para elegir entre Efectivo y Tarjeta.
   /// Si se elige Efectivo, genera el ticket normalmente.
   /// Si se elige Tarjeta, inicia el flujo SumUp Deep Link.
-  void _showPaymentMethodDialog(
-      String tipo, double valor, bool isCorrespondencia) {
+  Future<void> _showPaymentMethodDialog(
+      String tipo, double valor, bool isCorrespondencia) async {
     // Si SumUp está deshabilitado, generar ticket directamente con efectivo
     if (!_sumUpEnabled) {
-      _generateTicket(tipo, valor, isCorrespondencia);
+      await _generateTicket(tipo, valor, isCorrespondencia);
       return;
     }
 
@@ -764,9 +853,9 @@ class _HomeState extends State<Home> {
                           ),
                           elevation: 2,
                         ),
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.pop(ctx);
-                          _generateTicket(tipo, valor, isCorrespondencia);
+                          await _generateTicket(tipo, valor, isCorrespondencia);
                         },
                       ),
                     ),
@@ -847,18 +936,18 @@ class _HomeState extends State<Home> {
         if (!mounted) return;
 
         if (exitoso) {
-          // Guardar pago con tarjeta
+          // Generar el ticket (Fix 1: registra en caja ANTES de imprimir)
+          setState(() {
+            _isWaitingSumUp = false;
+          });
+          await _generateTicket(tipo, valor, isCorrespondencia);
+
+          // Guardar pago con tarjeta DESPUÉS de confirmar registro en caja
           await PagoStorageService.guardarPagoTarjeta(
             monto: valor,
             txCode: txCode,
             fecha: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
           );
-
-          // Generar el ticket normalmente (igual que efectivo)
-          setState(() {
-            _isWaitingSumUp = false;
-          });
-          await _generateTicket(tipo, valor, isCorrespondencia);
         } else {
           setState(() {
             _isWaitingSumUp = false;
@@ -880,8 +969,8 @@ class _HomeState extends State<Home> {
                 action: SnackBarAction(
                   label: 'Reintentar',
                   textColor: Colors.white,
-                  onPressed: () {
-                    _generateTicketConTarjeta(tipo, valor, isCorrespondencia);
+                  onPressed: () async {
+                    await _generateTicketConTarjeta(tipo, valor, isCorrespondencia);
                   },
                 ),
                 duration: Duration(seconds: 5),
@@ -1272,8 +1361,8 @@ class _HomeState extends State<Home> {
                   _switchValue,
                   context,
                   (String nombre, double valor, List<double> subtots,
-                      String comprobante) {
-                    reporteCaja.addOfferEntries(subtots, valor, comprobante);
+                      String comprobante) async {
+                    await reporteCaja.addOfferEntries(subtots, valor, comprobante);
                     if (!mounted) return;
                     setState(() {
                       _lastTransaction = {
@@ -1551,7 +1640,7 @@ class _HomeState extends State<Home> {
     await HomeHelpers.cancelLastTransaction(context);
 
     final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
-    reporteCaja.cancelTransaction();
+    await reporteCaja.cancelTransaction();
 
     setState(() {
       _hasAnulado = true;
@@ -1582,7 +1671,7 @@ class _HomeState extends State<Home> {
       extendBodyBehindAppBar: true,
       drawer: _buildDrawer(context),
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(56),
+        preferredSize: Size.fromHeight(76),
         child: AnimatedContainer(
           duration: Duration(milliseconds: 600),
           curve: Curves.easeInOut,
@@ -1610,7 +1699,7 @@ class _HomeState extends State<Home> {
             automaticallyImplyLeading: false,
             title: Row(
               children: [
-                // ── Izquierda: menú + badge ────────────────────────────
+                // ── Izquierda: menú ───────────────────────────────────
                 HomeAppBarWidgets.buildAppBarSlotWidget(
                   context: context,
                   slot: {'isEmpty': false, 'element': 'report'},
@@ -1628,6 +1717,15 @@ class _HomeState extends State<Home> {
                     _activateCooldown();
                     _scaffoldKey.currentState?.openDrawer();
                   },
+                ),
+                // ── Logo ──────────────────────────────────────────────
+                Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Image.asset(
+                    'assets/logo.png',
+                    height: 30,
+                    fit: BoxFit.contain,
+                  ),
                 ),
                 SizedBox(width: 10),
                 Consumer<ComprobanteModel>(
@@ -1712,7 +1810,7 @@ class _HomeState extends State<Home> {
                 // ── Espaciador ─────────────────────────────────────────
                 Spacer(),
 
-                // ── Derecha: anular · reimprimir · fecha ───────────────
+                // ── Derecha: anular · reimprimir ───────────────────────
                 HomeAppBarWidgets.buildAppBarSlotWidget(
                   context: context,
                   slot: {'isEmpty': false, 'element': 'delete'},
@@ -1731,7 +1829,6 @@ class _HomeState extends State<Home> {
                     _scaffoldKey.currentState?.openDrawer();
                   },
                 ),
-                SizedBox(width: 10),
                 HomeAppBarWidgets.buildAppBarSlotWidget(
                   context: context,
                   slot: {'isEmpty': false, 'element': 'reprint'},
@@ -1750,28 +1847,27 @@ class _HomeState extends State<Home> {
                     _scaffoldKey.currentState?.openDrawer();
                   },
                 ),
-                SizedBox(width: 10),
-                HomeAppBarWidgets.buildAppBarSlotWidget(
-                  context: context,
-                  slot: {'isEmpty': false, 'element': 'date'},
-                  currentDay: _currentDay,
-                  lastTransaction: _lastTransaction,
-                  hasReprinted: _hasReprinted,
-                  hasAnulado: _hasAnulado,
-                  isReprinting: _isReprinting,
-                  getCurrentDate: HomeHelpers.getCurrentDate,
-                  onNavigateToSettings: _navigateToSettings,
-                  onShowOfferDialog: _showOfferDialog,
-                  onShowPasswordDialog: _showPasswordDialog,
-                  onHandleReprint: _handleReprint,
-                  onOpenDrawer: () {
-                    _activateCooldown();
-                    _scaffoldKey.currentState?.openDrawer();
-                  },
-                ),
+                SizedBox(width: 6),
               ],
             ),
             titleSpacing: 0,
+            bottom: PreferredSize(
+              preferredSize: Size.fromHeight(20),
+              child: Container(
+                width: double.infinity,
+                height: 20,
+                alignment: Alignment.center,
+                child: Text(
+                  '$_currentDay  ${DateFormat('dd/MM/yy').format(DateTime.now())}',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1795,367 +1891,320 @@ class _HomeState extends State<Home> {
           Column(
             children: [
               // Espaciador para la AppBar
-              SizedBox(height: 90),
+              SizedBox(height: 110),
               // Banner de advertencia si hay días pendientes
               if (hasPendingDays)
                 Container(
                   width: double.infinity,
                   color: Colors.red.shade100,
-                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  padding: EdgeInsets.symmetric(vertical: 6, horizontal: 16),
                   child: Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded, color: Colors.red),
+                      Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Hay un dia con ventas sin cerrar',
                           style: TextStyle(
                               color: Colors.red.shade900,
-                              fontWeight: FontWeight.bold),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12),
                         ),
+                      ),
+                      TextButton(
+                        onPressed: _navigateToReports,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          minimumSize: Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text('Cerrar', style: TextStyle(fontSize: 11, color: Colors.red.shade900)),
                       ),
                     ],
                   ),
                 ),
 
-              // Contenido principal
-              Expanded(
-                child: Container(
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(
-                            top: 10.0, left: 10.0, right: 10.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            TransactionCounterWidget(),
-                          ],
-                        ),
+              // ── Banda de estado ──────────────────────────────────────
+              Container(
+                height: 56,
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    TransactionCounterWidget(),
+                    // Switch compacto modo tarifa
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-
-                      Expanded(
-                        child: Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Stack(
                             children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                padding: EdgeInsets.all(8),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    AnimatedSwitcher(
-                                      duration: Duration(milliseconds: 600),
-                                      transitionBuilder: (Widget child,
-                                          Animation<double> animation) {
-                                        return FadeTransition(
-                                          opacity: animation,
-                                          child: ScaleTransition(
-                                            scale: animation,
-                                            child: child,
-                                          ),
-                                        );
-                                      },
-                                      child: Stack(
-                                        key: ValueKey<bool>(_switchValue),
-                                        children: [
-                                          Text(
-                                            _switchValue
-                                                ? 'Domingo/Feriado'
-                                                : 'Lunes a Sábado',
-                                            style: TextStyle(
-                                              fontFamily: 'Hemiheads',
-                                              fontSize: textSize * 1,
-                                              foreground: Paint()
-                                                ..style = PaintingStyle.stroke
-                                                ..strokeWidth = 2
-                                                ..color = Colors.black,
-                                            ),
-                                          ),
-                                          Text(
-                                            _switchValue
-                                                ? 'Domingo/Feriado'
-                                                : 'Lunes a Sábado',
-                                            style: TextStyle(
-                                              fontFamily: 'Hemiheads',
-                                              fontSize: textSize * 1,
-                                              color: _switchValue
-                                                  ? Colors.red
-                                                  : Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    SizedBox(height: 5),
-                                    Switch(
-                                      value: _switchValue,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _switchValue = value;
-                                        });
-                                      },
-                                      activeColor: Colors.red,
-                                      activeTrackColor:
-                                          Colors.red.withOpacity(0.5),
-                                    ),
-                                  ],
+                              Text(
+                                _switchValue ? 'D/F' : 'L-S',
+                                style: TextStyle(
+                                  fontFamily: 'Hemiheads',
+                                  fontSize: textSize * 0.85,
+                                  foreground: Paint()
+                                    ..style = PaintingStyle.stroke
+                                    ..strokeWidth = 2
+                                    ..color = Colors.black,
                                 ),
                               ),
-                              Container(
-                                margin: const EdgeInsets.only(right: 16.0),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (hasPendingDays)
-                                      Container(
-                                        margin: EdgeInsets.only(bottom: 10),
-                                        width: 70,
-                                        height: 30,
-                                        child: ElevatedButton.icon(
-                                          icon: Icon(Icons.warning_amber,
-                                              size: 16),
-                                          label: Text('Cerrar',
-                                              style: TextStyle(fontSize: 10)),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red,
-                                            padding: EdgeInsets.symmetric(
-                                                horizontal: 5),
-                                          ),
-                                          onPressed: _navigateToReports,
-                                        ),
-                                      ),
-                                    Image.asset(
-                                      'assets/logo.png',
-                                      width: 130,
-                                      height: 100,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ],
+                              Text(
+                                _switchValue ? 'D/F' : 'L-S',
+                                style: TextStyle(
+                                  fontFamily: 'Hemiheads',
+                                  fontSize: textSize * 0.85,
+                                  color: _switchValue
+                                      ? Colors.red
+                                      : Colors.white,
                                 ),
                               ),
                             ],
                           ),
+                          Switch(
+                            value: _switchValue,
+                            onChanged: (value) {
+                              setState(() {
+                                _switchValue = value;
+                              });
+                            },
+                            activeColor: Colors.red,
+                            activeTrackColor: Colors.red.withOpacity(0.5),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Botones de venta ─────────────────────────────────────
+              Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      buttonHeight / 4,
+                      0,
+                      buttonHeight / 4,
+                      buttonHeight / 2,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+
+                      // ─── PASAJEROS (izq) | INTERMEDIO (der) ──────────
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Columna PASAJEROS ──────────────────────
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildSectionHeader('PASAJEROS'),
+                                SizedBox(height: 3),
+                                SizedBox(
+                                  height: buttonHeight,
+                                  child: HomeButtons.buildConfigurableButton(
+                                    context: context,
+                                    text: pasajes[0]['nombre'],
+                                    icon: Icons.people,
+                                    backgroundColor: _getButtonBackgroundColor(0, _switchValue),
+                                    borderColor: _getButtonBorderColor(0, _switchValue),
+                                    onPressed: () async {
+                                      await _showPaymentMethodDialog(pasajes[0]['nombre'], pasajes[0]['precio'], false);
+                                    },
+                                    showIcons: _showIcons,
+                                    textSizeMultiplier: _textSizeMultiplier,
+                                    buttonIcons: _buttonIcons,
+                                    isDisabled: _isButtonDisabled || hasPendingDays,
+                                  ),
+                                ),
+                                SizedBox(height: 5),
+                                SizedBox(
+                                  height: buttonHeight,
+                                  child: HomeButtons.buildConfigurableButton(
+                                    context: context,
+                                    text: pasajes[1]['nombre'],
+                                    icon: Icons.school,
+                                    backgroundColor: _getButtonBackgroundColor(1, _switchValue),
+                                    borderColor: _getButtonBorderColor(1, _switchValue),
+                                    onPressed: () async {
+                                      await _showPaymentMethodDialog(pasajes[1]['nombre'], pasajes[1]['precio'], false);
+                                    },
+                                    showIcons: _showIcons,
+                                    textSizeMultiplier: _textSizeMultiplier,
+                                    buttonIcons: _buttonIcons,
+                                    isDisabled: _isButtonDisabled || hasPendingDays,
+                                  ),
+                                ),
+                                SizedBox(height: 5),
+                                SizedBox(
+                                  height: buttonHeight,
+                                  child: HomeButtons.buildConfigurableButton(
+                                    context: context,
+                                    text: pasajes[2]['nombre'],
+                                    icon: Icons.elderly,
+                                    backgroundColor: _getButtonBackgroundColor(2, _switchValue),
+                                    borderColor: _getButtonBorderColor(2, _switchValue),
+                                    onPressed: () async {
+                                      await _showPaymentMethodDialog(pasajes[2]['nombre'], pasajes[2]['precio'], false);
+                                    },
+                                    showIcons: _showIcons,
+                                    textSizeMultiplier: _textSizeMultiplier,
+                                    buttonIcons: _buttonIcons,
+                                    isDisabled: _isButtonDisabled || hasPendingDays,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          // ── Columna INTERMEDIO ─────────────────────
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildSectionHeader('INTERMEDIO'),
+                                SizedBox(height: 3),
+                                SizedBox(
+                                  height: buttonHeight,
+                                  child: HomeButtons.buildConfigurableButton(
+                                    context: context,
+                                    text: pasajes[4]['nombre'],
+                                    icon: Icons.map,
+                                    backgroundColor: _getButtonBackgroundColor(4, _switchValue),
+                                    borderColor: _getButtonBorderColor(4, _switchValue),
+                                    onPressed: () async {
+                                      await _showPaymentMethodDialog(pasajes[4]['nombre'], pasajes[4]['precio'], false);
+                                    },
+                                    showIcons: _showIcons,
+                                    textSizeMultiplier: _textSizeMultiplier,
+                                    buttonIcons: _buttonIcons,
+                                    isDisabled: _isButtonDisabled || hasPendingDays,
+                                  ),
+                                ),
+                                SizedBox(height: 5),
+                                SizedBox(
+                                  height: buttonHeight,
+                                  child: HomeButtons.buildConfigurableButton(
+                                    context: context,
+                                    text: pasajes[3]['nombre'],
+                                    icon: Icons.directions_bus,
+                                    backgroundColor: _getButtonBackgroundColor(3, _switchValue),
+                                    borderColor: _getButtonBorderColor(3, _switchValue),
+                                    onPressed: () async {
+                                      await _showPaymentMethodDialog(pasajes[3]['nombre'], pasajes[3]['precio'], false);
+                                    },
+                                    showIcons: _showIcons,
+                                    textSizeMultiplier: _textSizeMultiplier,
+                                    buttonIcons: _buttonIcons,
+                                    isDisabled: _isButtonDisabled || hasPendingDays,
+                                  ),
+                                ),
+                                SizedBox(height: 5),
+                                SizedBox(
+                                  height: buttonHeight,
+                                  child: HomeButtons.buildConfigurableButton(
+                                    context: context,
+                                    text: pasajes.length > 5
+                                        ? pasajes[5]['nombre']
+                                        : 'Escolar Intermedio',
+                                    icon: Icons.school_outlined,
+                                    backgroundColor: _getButtonBackgroundColor(5, _switchValue),
+                                    borderColor: _getButtonBorderColor(5, _switchValue),
+                                    textColor: Colors.black,
+                                    onPressed: () async {
+                                      if (pasajes.length > 5) {
+                                        await _showPaymentMethodDialog(pasajes[5]['nombre'], pasajes[5]['precio'], false);
+                                      } else {
+                                        double defaultPrice = _switchValue ? 1300.0 : 1000.0;
+                                        await _showPaymentMethodDialog('Escolar Intermedio', defaultPrice, false);
+                                        print('ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
+                                      }
+                                    },
+                                    showIcons: _showIcons,
+                                    textSizeMultiplier: _textSizeMultiplier,
+                                    buttonIcons: _buttonIcons,
+                                    isDisabled: _isButtonDisabled || hasPendingDays,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+
+                      // ─── Sección OTROS ───────────────────────────────
+                      _buildSectionHeader('OTROS'),
+                      SizedBox(height: 3),
+                      SizedBox(
+                        height: buttonHeight,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: HomeButtons.buildConfigurableButton(
+                                context: context,
+                                text: 'O F E R T A',
+                                icon: Icons.local_offer,
+                                backgroundColor: hasPendingDays
+                                    ? Colors.grey.shade300
+                                    : _getOtrosButtonBackgroundColor(0),
+                                borderColor: hasPendingDays
+                                    ? Colors.grey
+                                    : _getOtrosButtonBorderColor(0),
+                                textColor: Colors.black,
+                                onPressed: _showMultiOfferDialog,
+                                showIcons: _showIcons,
+                                textSizeMultiplier: _textSizeMultiplier,
+                                buttonIcons: _buttonIcons,
+                                isDisabled: _isButtonDisabled || hasPendingDays,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: HomeButtons.buildConfigurableButton(
+                                context: context,
+                                text: 'C A R G O',
+                                icon: Icons.inventory,
+                                textColor: Colors.black,
+                                backgroundColor:
+                                    _isButtonDisabled || hasPendingDays
+                                        ? Colors.grey
+                                        : _getOtrosButtonBackgroundColor(1),
+                                borderColor: _isButtonDisabled || hasPendingDays
+                                    ? Colors.grey.shade600
+                                    : _getOtrosButtonBorderColor(1),
+                                onPressed: _showOfferDialog,
+                                showIcons: _showIcons,
+                                textSizeMultiplier: _textSizeMultiplier,
+                                buttonIcons: _buttonIcons,
+                                isDisabled: _isButtonDisabled || hasPendingDays,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-
-                      // Primera fila: Público General | Intermedio hasta 50kms
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: pasajes[0]['nombre'],
-                              icon: Icons.people,
-                              backgroundColor:
-                                  _getButtonBackgroundColor(0, _switchValue),
-                              borderColor:
-                                  _getButtonBorderColor(0, _switchValue),
-                              onPressed: () {
-                                _showPaymentMethodDialog(pasajes[0]['nombre'],
-                                    pasajes[0]['precio'], false);
-                              },
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: pasajes[4]['nombre'],
-                              icon: Icons.map,
-                              backgroundColor:
-                                  _getButtonBackgroundColor(4, _switchValue),
-                              borderColor:
-                                  _getButtonBorderColor(4, _switchValue),
-                              onPressed: () {
-                                _showPaymentMethodDialog(pasajes[4]['nombre'],
-                                    pasajes[4]['precio'], false);
-                              },
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 5),
-
-                      // Segunda fila: Escolar | Intermedio hasta 15 km
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: pasajes[1]['nombre'],
-                              icon: Icons.school,
-                              backgroundColor:
-                                  _getButtonBackgroundColor(1, _switchValue),
-                              borderColor:
-                                  _getButtonBorderColor(1, _switchValue),
-                              onPressed: () {
-                                _showPaymentMethodDialog(pasajes[1]['nombre'],
-                                    pasajes[1]['precio'], false);
-                              },
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: pasajes[3]['nombre'],
-                              icon: Icons.directions_bus,
-                              backgroundColor:
-                                  _getButtonBackgroundColor(3, _switchValue),
-                              borderColor:
-                                  _getButtonBorderColor(3, _switchValue),
-                              onPressed: () {
-                                _showPaymentMethodDialog(pasajes[3]['nombre'],
-                                    pasajes[3]['precio'], false);
-                              },
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 5),
-
-                      // Tercera fila: Adulto Mayor | Escolar Intermedio
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: pasajes[2]['nombre'],
-                              icon: Icons.elderly,
-                              backgroundColor:
-                                  _getButtonBackgroundColor(2, _switchValue),
-                              borderColor:
-                                  _getButtonBorderColor(2, _switchValue),
-                              onPressed: () {
-                                _showPaymentMethodDialog(pasajes[2]['nombre'],
-                                    pasajes[2]['precio'], false);
-                              },
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: pasajes.length > 5
-                                  ? pasajes[5]['nombre']
-                                  : 'Escolar Intermedio',
-                              icon: Icons.school_outlined,
-                              backgroundColor:
-                                  _getButtonBackgroundColor(5, _switchValue),
-                              borderColor:
-                                  _getButtonBorderColor(5, _switchValue),
-                              textColor: Colors.black,
-                              onPressed: () {
-                                if (pasajes.length > 5) {
-                                  _showPaymentMethodDialog(pasajes[5]['nombre'],
-                                      pasajes[5]['precio'], false);
-                                } else {
-                                  double defaultPrice =
-                                      _switchValue ? 1300.0 : 1000.0;
-                                  _showPaymentMethodDialog('Escolar Intermedio',
-                                      defaultPrice, false);
-                                  print(
-                                      'ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
-                                }
-                              },
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 5),
-
-                      // Cuarta fila: Multi Oferta y Cargo
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: 'O F E R T A',
-                              icon: Icons.local_offer,
-                              backgroundColor: hasPendingDays
-                                  ? Colors.grey.shade300
-                                  : Colors.orange,
-                              borderColor: Colors.black,
-                              textColor: Colors.black,
-                              onPressed: _showMultiOfferDialog,
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                          SizedBox(
-                            width: (buttonWidth / 2) - 10,
-                            height: buttonHeight,
-                            child: HomeButtons.buildConfigurableButton(
-                              context: context,
-                              text: 'C A R G O',
-                              icon: Icons.inventory,
-                              textColor: Colors.black,
-                              backgroundColor:
-                                  _isButtonDisabled || hasPendingDays
-                                      ? Colors.grey
-                                      : Colors.orange,
-                              borderColor: Colors.black,
-                              onPressed: _showOfferDialog,
-                              showIcons: _showIcons,
-                              textSizeMultiplier: _textSizeMultiplier,
-                              buttonIcons: _buttonIcons,
-                              isDisabled: _isButtonDisabled || hasPendingDays,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 10),
+                      SizedBox(height: 8),
                     ],
                   ),
                 ),
               ),
+            ),
             ],
           ),
 

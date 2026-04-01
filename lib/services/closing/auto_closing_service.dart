@@ -95,7 +95,7 @@ class AutoClosingService {
       }
 
       // Limpiar las transacciones del ReporteCaja
-      reporteCaja.clearTransactions();
+      await reporteCaja.clearTransactions();
 
       return true;
     } catch (e) {

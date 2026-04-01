@@ -49,6 +49,7 @@ class ReporteCaja extends ChangeNotifier {
       await prefs.setInt(_prefsNextIdKey, _nextId);
     } catch (e) {
       debugPrint('Error guardando transacciones: $e');
+      rethrow;
     }
   }
 
@@ -75,28 +76,28 @@ class ReporteCaja extends ChangeNotifier {
   }
 
   // Recibir datos de ticket
-  void receiveData(String nombre, double valor, String comprobante) {
+  Future<void> receiveData(String nombre, double valor, String comprobante) async {
     _transactions.add(_createTransaction(nombre, valor, comprobante));
+    await _saveToPrefs();
     notifyListeners();
-    _saveToPrefs();
   }
 
   // Recibir datos de cargo (para tickets de cargo)
-  void receiveCargoData(String destinatario, double precio, String comprobante) {
+  Future<void> receiveCargoData(String destinatario, double precio, String comprobante) async {
     _transactions.add(_createTransaction('Cargo: $destinatario', precio, comprobante));
+    await _saveToPrefs();
     notifyListeners();
-    _saveToPrefs();
   }
 
   // Añadir entradas de oferta (para tickets de oferta múltiple)
-  void addOfferEntries(List<double> subtotals, double total, String comprobante) {
+  Future<void> addOfferEntries(List<double> subtotals, double total, String comprobante) async {
     _transactions.add(_createTransaction('Oferta Ruta', total, comprobante));
+    await _saveToPrefs();
     notifyListeners();
-    _saveToPrefs();
   }
 
   // Cancelar última transacción
-  void cancelTransaction() {
+  Future<void> cancelTransaction() async {
     if (_transactions.isEmpty) return;
 
     // Buscar la última transacción que no sea una anulación
@@ -115,8 +116,8 @@ class ReporteCaja extends ChangeNotifier {
       String comprobante = lastTransaction['comprobante'];
 
       _transactions.add(_createTransaction(nombre, valor, comprobante));
+      await _saveToPrefs();
       notifyListeners();
-      _saveToPrefs();
     }
   }
 
@@ -129,10 +130,10 @@ class ReporteCaja extends ChangeNotifier {
   }
 
   // NUEVO: Eliminar una transacción específica por ID
-  void removeTransaction(int id) {
+  Future<void> removeTransaction(int id) async {
     _transactions.removeWhere((t) => t['id'] == id);
+    await _saveToPrefs();
     notifyListeners();
-    _saveToPrefs();
   }
 
   // Calcular el total considerando anulaciones
@@ -148,11 +149,11 @@ class ReporteCaja extends ChangeNotifier {
   }
 
   // Vaciar todas las transacciones
-  void clearTransactions() {
+  Future<void> clearTransactions() async {
     _transactions.clear();
     _nextId = 1;
+    await _saveToPrefs();
     notifyListeners();
-    _saveToPrefs();
   }
 
   // NUEVO: Obtener transacciones por fecha

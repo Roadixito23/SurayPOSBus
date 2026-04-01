@@ -22,6 +22,7 @@ class Settings extends StatefulWidget {
 class _SettingsState extends State<Settings>
     with SingleTickerProviderStateMixin {
   final TextEditingController passwordController = TextEditingController();
+  final TextEditingController settingsPasswordController = TextEditingController();
   final TextEditingController idController = TextEditingController();
   bool isAuthenticated = false;
   double _textSizeMultiplier = 0.8;
@@ -159,6 +160,7 @@ class _SettingsState extends State<Settings>
     _loadLinkedNfcCards();
     _loadSumUpEnabled();
     _loadSumUpAffiliateKey();
+    _initDefaultPasswords();
     _tabController = TabController(length: 4, vsync: this);
   }
 
@@ -169,6 +171,7 @@ class _SettingsState extends State<Settings>
     }
     _tabController.dispose();
     passwordController.dispose();
+    settingsPasswordController.dispose();
     idController.dispose();
     _sumUpAffiliateKeyController.dispose();
     for (var controller in _abbreviationControllers.values) {
@@ -613,7 +616,7 @@ class _SettingsState extends State<Settings>
   }
 
   void _authenticate() async {
-    String storedPassword = await _loadPassword();
+    String storedPassword = await _loadSettingsPassword();
     if (passwordController.text == storedPassword) {
       setState(() {
         isAuthenticated = true;
@@ -634,6 +637,56 @@ class _SettingsState extends State<Settings>
         ),
       );
     }
+  }
+
+  /// Inicializa contraseñas por defecto solo si no existen en prefs
+  Future<void> _initDefaultPasswords() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!prefs.containsKey('password')) {
+      await prefs.setString('password', '123456');
+    }
+    if (!prefs.containsKey('settings_password')) {
+      await prefs.setString('settings_password', '654321');
+    }
+  }
+
+  Future<String> _loadSettingsPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('settings_password') ?? '654321';
+  }
+
+  Future<void> _saveSettingsPassword(String newPassword) async {
+    if (newPassword.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 10),
+              Text('La contraseña debe tener 6 dígitos'),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('settings_password', newPassword);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 10),
+            Text('Contraseña de ajustes actualizada'),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   Future<void> _checkNfcAvailability() async {
@@ -1577,19 +1630,28 @@ class _SettingsState extends State<Settings>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── Contraseña de ingreso al sistema ──────────────
                   Text(
-                    'Cambiar contraseña de acceso (6 dígitos)',
-                    style: TextStyle(color: Colors.grey[600]),
+                    'Contraseña de Ingreso al Sistema',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Se solicita al abrir la pantalla principal (por defecto: 123456)',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
                   ),
                   SizedBox(height: 10),
                   TextField(
                     controller: passwordController,
                     decoration: InputDecoration(
-                      labelText: 'Nueva Contraseña',
+                      labelText: 'Nueva contraseña de ingreso',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      prefixIcon: Icon(Icons.password),
+                      prefixIcon: Icon(Icons.login),
                     ),
                     obscureText: true,
                     keyboardType: TextInputType.number,
@@ -1597,18 +1659,64 @@ class _SettingsState extends State<Settings>
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 18, letterSpacing: 8),
                   ),
-                  SizedBox(height: 10),
+                  SizedBox(height: 6),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        _savePassword(passwordController.text);
-                      },
+                      onPressed: () => _savePassword(passwordController.text),
                       icon: Icon(Icons.save),
-                      label: Text('Guardar Contraseña'),
+                      label: Text('Guardar contraseña de ingreso'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
-                        padding: EdgeInsets.symmetric(vertical: 15),
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  Divider(height: 32),
+
+                  // ── Contraseña de ajustes ──────────────────────────
+                  Text(
+                    'Contraseña de Ajustes',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Se solicita para acceder a esta pantalla (por defecto: 654321)',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  ),
+                  SizedBox(height: 10),
+                  TextField(
+                    controller: settingsPasswordController,
+                    decoration: InputDecoration(
+                      labelText: 'Nueva contraseña de ajustes',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      prefixIcon: Icon(Icons.settings),
+                    ),
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18, letterSpacing: 8),
+                  ),
+                  SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _saveSettingsPassword(settingsPasswordController.text),
+                      icon: Icon(Icons.save),
+                      label: Text('Guardar contraseña de ajustes'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        padding: EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -2002,6 +2110,48 @@ class _SettingsState extends State<Settings>
                             buttonName:
                                 sundayTicketModel.pasajes[index]['nombre'],
                             ticketType: 'sunday',
+                            buttonIndex: index,
+                          ),
+                        ),
+                      );
+                      if (result == true) {
+                        _settingsChanged = true;
+                      }
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+          SizedBox(height: 20),
+          _buildSectionCard(
+            title: 'Colores de Botones - Otros',
+            icon: Icons.palette,
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: 2,
+              separatorBuilder: (context, index) => Divider(height: 1),
+              itemBuilder: (context, index) {
+                final names = ['O F E R T A', 'C A R G O'];
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.orange[100],
+                    child: Icon(Icons.color_lens, color: Colors.orange),
+                  ),
+                  title: Text(
+                    names[index],
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(Icons.palette, color: primaryColor),
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ButtonColorSettingsScreen(
+                            buttonName: names[index],
+                            ticketType: 'otros',
                             buttonIndex: index,
                           ),
                         ),

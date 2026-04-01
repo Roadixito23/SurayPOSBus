@@ -8,8 +8,6 @@ import 'package:path_provider/path_provider.dart'; // Para obtener la ruta del d
 import 'package:flutter/services.dart'; // Para cargar recursos
 
 class PdfReportGenerator {
-  // Constante para definir cuántos días mantener los reportes (por defecto 30 días)
-  static const int _MAX_DAYS_TO_KEEP_REPORTS = 30;
 
   Future<Uint8List> generatePdf(List<Map<String, dynamic>> transactions, double total, DateTime reportDate) async {
     final pdf = pw.Document();
@@ -281,70 +279,7 @@ class PdfReportGenerator {
     // Guardar información del día
     await _saveDailyReport(diaDeLaSemana, reportDate, ticketId, correspondenceTransactions, pasajeTransactions, annulledTransactions);
 
-    // Limpiar reportes antiguos
-    await cleanOldReports();
-
     return pdfData; // Retornar el PDF generado
-  }
-
-  // NUEVA FUNCIÓN: Limpia los reportes antiguos, manteniendo solo los más recientes
-  Future<void> cleanOldReports([int maxDaysToKeep = _MAX_DAYS_TO_KEEP_REPORTS]) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final now = DateTime.now();
-
-      // Obtenemos la lista de archivos en el directorio
-      final List<FileSystemEntity> files = directory.listSync();
-      int cleanedCount = 0;
-
-      for (var entity in files) {
-        if (entity is File) {
-          final String fileName = entity.path.split('/').last;
-
-          // Verificar si es un archivo de reporte PDF
-          if (fileName.startsWith('reporte_') && fileName.endsWith('.pdf')) {
-            try {
-              final FileStat stats = await entity.stat();
-              final fileDate = stats.modified;
-              final difference = now.difference(fileDate).inDays;
-
-              // Si el archivo es más antiguo que el límite, lo eliminamos
-              if (difference > maxDaysToKeep) {
-                await entity.delete();
-                cleanedCount++;
-                print('Eliminado reporte antiguo: $fileName ($difference días)');
-              }
-            } catch (e) {
-              print('Error al procesar archivo para limpieza: $fileName - $e');
-            }
-          }
-
-          // También verificar archivos de informe de día
-          if (fileName.startsWith('informe_dia_') && fileName.endsWith('.txt')) {
-            try {
-              final FileStat stats = await entity.stat();
-              final fileDate = stats.modified;
-              final difference = now.difference(fileDate).inDays;
-
-              // Si el archivo es más antiguo que el límite, lo eliminamos
-              if (difference > maxDaysToKeep) {
-                await entity.delete();
-                cleanedCount++;
-                print('Eliminado informe diario antiguo: $fileName ($difference días)');
-              }
-            } catch (e) {
-              print('Error al procesar archivo para limpieza: $fileName - $e');
-            }
-          }
-        }
-      }
-
-      if (cleanedCount > 0) {
-        print('Proceso de limpieza completado. Se eliminaron $cleanedCount archivos antiguos.');
-      }
-    } catch (e) {
-      print('Error durante la limpieza de reportes antiguos: $e');
-    }
   }
 
   // NUEVA FUNCIÓN: Encuentra la mejor abreviatura para un nombre de ticket

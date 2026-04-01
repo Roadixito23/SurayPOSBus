@@ -21,10 +21,11 @@ class GenerateTicket {
       bool isSunday,
       String tipo,
       ComprobanteModel comprobanteModel,
-      bool isReprint,) async {
+      bool isReprint,
+      {bool skipIncrement = false}) async {
     await preloadResources();
 
-    if (!isReprint) {
+    if (!isReprint && !skipIncrement) {
       await comprobanteModel.incrementComprobante();
     }
 

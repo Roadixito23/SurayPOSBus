@@ -3,58 +3,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
-/// Clase utilitaria para gestionar la limpieza automática de reportes y estadísticas
+/// Clase utilitaria para gestionar estadísticas de reportes
 class ReportCleaner {
-  // Constante para definir el período de retención de reportes (30 días por defecto)
-  static const int DEFAULT_RETENTION_DAYS = 30;
-
-  /// Limpia los reportes vencidos cuando se inicia la aplicación
-  /// Retorna la cantidad de reportes eliminados
-  static Future<int> cleanExpiredReportsOnStartup([int retentionDays = DEFAULT_RETENTION_DAYS]) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final DateTime cutoffDate = DateTime.now().subtract(Duration(days: retentionDays));
-      int cleanedCount = 0;
-
-      // Obtener la lista de archivos en el directorio
-      final List<FileSystemEntity> files = directory.listSync();
-
-      for (var entity in files) {
-        if (entity is File) {
-          final String fileName = entity.path.split('/').last;
-
-          // Verificar si es un archivo de reporte PDF o un informe de día
-          if ((fileName.startsWith('reporte_') && fileName.endsWith('.pdf')) ||
-              (fileName.startsWith('informe_dia_') && fileName.endsWith('.txt'))) {
-            try {
-              final FileStat stats = await entity.stat();
-              final fileDate = stats.modified;
-              final difference = DateTime.now().difference(fileDate).inDays;
-
-              // Si el archivo es más antiguo que el límite, lo eliminamos
-              if (difference > retentionDays) {
-                await entity.delete();
-                cleanedCount++;
-                debugPrint('Eliminado reporte antiguo: $fileName ($difference días)');
-              }
-            } catch (e) {
-              debugPrint('Error al procesar archivo para limpieza: $fileName - $e');
-            }
-          }
-        }
-      }
-
-      if (cleanedCount > 0) {
-        debugPrint('Limpieza automática completada: $cleanedCount archivos eliminados.');
-      }
-
-      return cleanedCount;
-    } catch (e) {
-      debugPrint('Error durante la limpieza automática de reportes: $e');
-      return 0;
-    }
-  }
-
   /// Obtiene estadísticas sobre los reportes almacenados
   static Future<Map<String, dynamic>> getReportStatistics() async {
     try {

@@ -25,6 +25,7 @@ class _ButtonColorSettingsScreenState
   double _bgRed = 0;
   double _bgGreen = 0;
   double _bgBlue = 0;
+  double _bgOpacity = 0.70;
 
   // Colores para border
   double _borderRed = 0;
@@ -51,6 +52,7 @@ class _ButtonColorSettingsScreenState
         _bgRed = colors['bgRed'] ?? 0;
         _bgGreen = colors['bgGreen'] ?? 0;
         _bgBlue = colors['bgBlue'] ?? 0;
+        _bgOpacity = (colors['bgOpacity'] as num?)?.toDouble() ?? 0.70;
         _borderRed = colors['borderRed'] ?? 0;
         _borderGreen = colors['borderGreen'] ?? 0;
         _borderBlue = colors['borderBlue'] ?? 0;
@@ -116,7 +118,7 @@ class _ButtonColorSettingsScreenState
           _borderBlue = 0;
           break;
       }
-    } else {
+    } else if (widget.ticketType == 'sunday') {
       // Domingo/Feriado (sunday)
       switch (widget.buttonIndex) {
         case 0: // Público General
@@ -168,8 +170,18 @@ class _ButtonColorSettingsScreenState
           _borderBlue = 0;
           break;
       }
+    } else {
+      // OTROS: OFERTA (0) y CARGO (1)
+      // Ambos usan naranja por defecto
+      _bgRed = 255;
+      _bgGreen = 152;
+      _bgBlue = 0; // Colors.orange
+      _borderRed = 0;
+      _borderGreen = 0;
+      _borderBlue = 0;
     }
     setState(() {
+      _bgOpacity = 0.70;
       _isLoading = false;
     });
   }
@@ -182,6 +194,7 @@ class _ButtonColorSettingsScreenState
       'bgRed': _bgRed,
       'bgGreen': _bgGreen,
       'bgBlue': _bgBlue,
+      'bgOpacity': _bgOpacity,
       'borderRed': _borderRed,
       'borderGreen': _borderGreen,
       'borderBlue': _borderBlue,
@@ -231,6 +244,9 @@ class _ButtonColorSettingsScreenState
   }
 
   Color get _backgroundColor =>
+      Color.fromRGBO(_bgRed.toInt(), _bgGreen.toInt(), _bgBlue.toInt(), _bgOpacity);
+
+  Color get _backgroundColorFull =>
       Color.fromRGBO(_bgRed.toInt(), _bgGreen.toInt(), _bgBlue.toInt(), 1);
 
   Color get _borderColor => Color.fromRGBO(
@@ -345,7 +361,7 @@ class _ButtonColorSettingsScreenState
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: _backgroundColor.computeLuminance() > 0.5
+                            color: _backgroundColorFull.computeLuminance() > 0.5
                                 ? Colors.black
                                 : Colors.white,
                           ),
@@ -410,6 +426,57 @@ class _ButtonColorSettingsScreenState
                       _bgBlue,
                       Colors.blue.shade400,
                       (value) => setState(() => _bgBlue = value),
+                    ),
+                    SizedBox(height: 16),
+                    Divider(height: 1, color: Colors.grey.shade300),
+                    SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Icon(Icons.opacity, size: 18, color: Colors.grey[600]),
+                        SizedBox(width: 6),
+                        Text(
+                          'Opacidad del relleno',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        Spacer(),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.grey.shade400),
+                          ),
+                          child: Text(
+                            '${(_bgOpacity * 100).round()}%',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: Colors.grey.shade600,
+                        inactiveTrackColor: Colors.grey.shade300,
+                        thumbColor: Colors.grey.shade700,
+                        overlayColor: Colors.grey.withOpacity(0.2),
+                        trackHeight: 6,
+                        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10),
+                      ),
+                      child: Slider(
+                        value: _bgOpacity,
+                        min: 0.0,
+                        max: 1.0,
+                        divisions: 100,
+                        onChanged: (value) => setState(() => _bgOpacity = value),
+                      ),
                     ),
                   ],
                 ),

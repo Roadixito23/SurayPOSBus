@@ -10,7 +10,6 @@ import '../services/pdf/pdfReport_generator.dart';
 import '../services/pdf/pdf_optimizer.dart';
 import '../services/pago_storage_service.dart';
 import '../theme/app_theme.dart';
-import '../services/report/report_cleaner.dart';
 import 'reporte_recovery.dart'; // Import for navigation
 
 class ReporteCajaScreen extends StatefulWidget {
@@ -24,10 +23,8 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     with TickerProviderStateMixin {
   bool _isLoading = false;
   String _statusMessage = '';
-  bool _showAdminOptions = false;
   bool _sortNewestFirst = true;
   int _sortVersion = 0; // incrementar para forzar AnimatedSwitcher
-  final TextEditingController _adminPasswordController = TextEditingController();
   final PdfOptimizer pdfOptimizer = PdfOptimizer();
 
   // Controladores para animaciones
@@ -192,7 +189,6 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
 
   @override
   void dispose() {
-    _adminPasswordController.dispose();
     _fadeController.dispose();
     _staggeredController.dispose();
     _pulseController.dispose();
@@ -250,7 +246,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
       );
 
       // Clear transactions after successful printing
-      reporteCaja.clearTransactions();
+      await reporteCaja.clearTransactions();
 
       setState(() {
         _isLoading = false;
@@ -290,171 +286,7 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     );
   }
 
-  // NUEVO MÉTODO: Para cerrar forzadamente las cajas pendientes
-  Future<void> _forceCloseOldTransactions() async {
-    final reporteCaja = Provider.of<ReporteCaja>(context, listen: false);
 
-    // Verificar si hay transacciones para cerrar
-    final today = DateTime.now();
-    final todayDay = DateFormat('dd').format(today);
-    final todayMonth = DateFormat('MM').format(today);
-    final todayYear = today.year.toString();
-
-    // Filtrar transacciones de días anteriores
-    final oldTransactions = reporteCaja.getOrderedTransactions().where((t) {
-      // Verificar si la transacción no es una anulación
-      if (t['nombre'].toString().startsWith('Anulación:')) {
-        return false;
-      }
-
-      // Obtener fecha de la transacción
-      final transDay = t['dia'];
-      final transMonth = t['mes'];
-      final transYear = t['ano'] ?? todayYear; // Usar año actual si no está definido
-
-      // Determinar si la transacción es de un día anterior
-      if (transYear < todayYear) {
-        return true; // Año anterior
-      } else if (transYear == todayYear) {
-        if (transMonth < todayMonth) {
-          return true; // Mes anterior en el mismo año
-        } else if (transMonth == todayMonth && transDay < todayDay) {
-          return true; // Día anterior en el mismo mes
-        }
-      }
-
-      return false;
-    }).toList();
-
-    if (oldTransactions.isEmpty) {
-      _showSnackBar('No hay transacciones antiguas pendientes', Colors.blue);
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _statusMessage = 'Cerrando transacciones antiguas...';
-    });
-
-    try {
-      // Agrupar transacciones por día para generar reportes separados
-      Map<String, List<Map<String, dynamic>>> transactionsByDate = {};
-
-      for (var transaction in oldTransactions) {
-        final day = transaction['dia'];
-        final month = transaction['mes'];
-        final year = transaction['ano'] ?? todayYear;
-        final dateKey = '$year-$month-$day';
-
-        if (!transactionsByDate.containsKey(dateKey)) {
-          transactionsByDate[dateKey] = [];
-        }
-
-        transactionsByDate[dateKey]!.add(transaction);
-      }
-
-      // Generar un reporte para cada día
-      final generator = PdfReportGenerator();
-
-      for (var entry in transactionsByDate.entries) {
-        final transactions = entry.value;
-        final dateKey = entry.key.split('-');
-
-        // Crear fecha para el reporte
-        final reportDate = DateTime(
-          int.parse(dateKey[0]),
-          int.parse(dateKey[1]),
-          int.parse(dateKey[2]),
-        );
-
-        // Calcular total para estas transacciones
-        final total = transactions.fold(0.0, (sum, t) => sum + (t['valor'] ?? 0.0));
-
-        // Generar PDF para este día
-        await generator.generatePdf(transactions, total, reportDate);
-
-        // Eliminar estas transacciones de la lista del ReporteCaja
-        for (var transaction in transactions) {
-          reporteCaja.removeTransaction(transaction['id']);
-        }
-      }
-
-      setState(() {
-        _isLoading = false;
-        _statusMessage = 'Cajas antiguas cerradas correctamente';
-      });
-
-      _showSnackBar(
-          'Se han cerrado ${transactionsByDate.length} cajas pendientes',
-          AppTheme.turquoise
-      );
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _statusMessage = 'Error al cerrar cajas antiguas: $e';
-      });
-
-      _showSnackBar('Error al cerrar cajas antiguas: $e', AppTheme.coral);
-    }
-  }
-
-  // NUEVO MÉTODO: Para limpiar reportes antiguos manualmente
-  Future<void> _cleanOldReportsManually() async {
-    // Mostrar diálogo de confirmación
-    bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Confirmar Limpieza', style: AppTheme.subtitleLarge),
-        content: Text(
-          '¿Está seguro de que desea eliminar los reportes con más de 30 días? Esta acción no se puede deshacer.',
-          style: AppTheme.bodyMedium,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            child: Text('Cancelar'),
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.coral,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Confirmar'),
-          ),
-        ],
-      ),
-    ) ?? false;
-
-    if (!confirm) return;
-
-    setState(() {
-      _isLoading = true;
-      _statusMessage = 'Limpiando reportes antiguos...';
-    });
-
-    try {
-      int cleanedCount = await ReportCleaner.cleanExpiredReportsOnStartup(30); // Mantener reportes hasta 30 días
-
-      setState(() {
-        _isLoading = false;
-        _statusMessage = 'Reportes antiguos limpiados correctamente';
-      });
-
-      if (cleanedCount > 0) {
-        _showSnackBar('Se eliminaron $cleanedCount reportes antiguos', AppTheme.turquoise);
-      } else {
-        _showSnackBar('No se encontraron reportes antiguos para eliminar', Colors.blue);
-      }
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _statusMessage = 'Error al limpiar reportes antiguos: $e';
-      });
-
-      _showSnackBar('Error al limpiar reportes antiguos: $e', AppTheme.coral);
-    }
-  }
 
   // NUEVO MÉTODO: Determinar la fecha del reporte basándose en las transacciones
   // Este método garantiza que el cierre de caja se genere con la fecha correcta
@@ -511,90 +343,6 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     }
   }
 
-  // Método para mostrar diálogo de autenticación de administrador
-  Future<void> _showAdminAuthDialog() async {
-    // Reiniciar el controlador de texto
-    _adminPasswordController.clear();
-
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            'Acceso Administrador',
-            style: TextStyle(
-              fontFamily: AppTheme.fontHemiheads,
-              color: AppTheme.turquoiseDark,
-              fontSize: 20,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Ingrese la contraseña de administrador para acceder a funciones avanzadas',
-                style: AppTheme.bodyMedium,
-              ),
-              SizedBox(height: 16),
-              TextField(
-                controller: _adminPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'Contraseña',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppTheme.turquoise),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppTheme.turquoiseDark, width: 2),
-                  ),
-                  prefixIcon: Icon(Icons.lock_outline, color: AppTheme.turquoise),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                // Verificar contraseña
-                final prefs = await SharedPreferences.getInstance();
-                final adminPass = prefs.getString('password') ?? '232323';
-
-                if (_adminPasswordController.text == adminPass) {
-                  Navigator.of(context).pop();
-                  setState(() {
-                    _showAdminOptions = true;
-                  });
-                } else {
-                  Navigator.of(context).pop();
-                  _showSnackBar('Contraseña incorrecta', AppTheme.coral);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.turquoise,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text('Acceder'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   // Método para navegar a la pantalla de reportes antiguos
   void _navigateToOldReports() {
     Navigator.push(
@@ -604,117 +352,6 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
   }
 
   // ─── Widgets auxiliares ───────────────────────────────────────────────────
-
-  Widget _buildAlertBanner(int oldestPendingDays) {
-    return Material(
-      color: AppTheme.coral,
-      child: InkWell(
-        onTap: _showAdminOptions ? _forceCloseOldTransactions : _showAdminAuthDialog,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          child: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Cajas pendientes · $oldestPendingDays días de antigüedad',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.white, size: 18),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdminSection() {
-    return Card(
-      elevation: 2,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.admin_panel_settings,
-                    color: AppTheme.turquoiseDark, size: 17),
-                const SizedBox(width: 6),
-                const Text(
-                  'Administrador',
-                  style: TextStyle(
-                    fontFamily: AppTheme.fontHemiheads,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.turquoiseDark,
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => setState(() => _showAdminOptions = false),
-                  style: TextButton.styleFrom(
-                    minimumSize: Size.zero,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    foregroundColor: Colors.grey,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('Salir', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.warning_amber_rounded, size: 15),
-                    label: const Text('Cerrar Pendientes',
-                        style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.coral,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: _forceCloseOldTransactions,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.cleaning_services, size: 15),
-                    label: const Text('Limpiar Reportes',
-                        style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.turquoise,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: _cleanOldReportsManually,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildSummaryCard(
       List<Map<String, dynamic>> transactions, double total) {
@@ -1165,8 +802,6 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
     final reporteCaja = Provider.of<ReporteCaja>(context);
     final transactions = reporteCaja.getOrderedTransactions();
     final total = reporteCaja.getTotal();
-    final hasOldTransactions = reporteCaja.hasPendingOldTransactions();
-    final oldestPendingDays = reporteCaja.getOldestPendingDays();
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -1184,29 +819,10 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
         foregroundColor: Colors.white,
         elevation: 2,
         actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.history_rounded, color: Colors.white),
-                onPressed: _navigateToOldReports,
-                tooltip: 'Reportes Anteriores',
-              ),
-              if (hasOldTransactions)
-                Positioned(
-                  right: 9,
-                  top: 11,
-                  child: Container(
-                    width: 9,
-                    height: 9,
-                    decoration: BoxDecoration(
-                      color: AppTheme.coral,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                  ),
-                ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.history_rounded, color: Colors.white),
+            onPressed: _navigateToOldReports,
+            tooltip: 'Reportes Anteriores',
           ),
         ],
       ),
@@ -1214,9 +830,6 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
         children: [
           Column(
             children: [
-              // Banner de alerta compacto
-              if (hasOldTransactions) _buildAlertBanner(oldestPendingDays),
-
               // Contenido desplazable
               Expanded(
                 child: RefreshIndicator(
@@ -1228,10 +841,6 @@ class _ReporteCajaScreenState extends State<ReporteCajaScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (_showAdminOptions) ...[
-                          _buildAdminSection(),
-                          const SizedBox(height: 10),
-                        ],
                         _buildSummaryCard(transactions, total),
                         const SizedBox(height: 10),
                         _buildTransactionsList(transactions),
