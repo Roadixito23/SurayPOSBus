@@ -1,22 +1,38 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../database/database_service.dart';
 
-/// Servicio para obtener estadísticas de ventas desde SharedPreferences
+/// Servicio para obtener estadísticas de ventas desde SQLite + SharedPreferences
 class StatisticsService {
   static const String _transactionsKey = 'reporte_caja_transactions';
 
-  /// Carga todas las transacciones almacenadas en SharedPreferences
+  /// Carga todas las transacciones: históricas (SQLite) + día actual (SharedPreferences)
   Future<List<Map<String, dynamic>>> _loadAllTransactions() async {
+    // 1. Transacciones históricas desde SQLite (días ya cerrados)
+    // Try-catch propio: un fallo en BD no debe cancelar la lectura de SharedPreferences
+    List<Map<String, dynamic>> dbTransactions = [];
+    try {
+      final dbService = DatabaseService();
+      dbTransactions = await dbService.getAllTransactionsAsMap();
+    } catch (e) {
+      debugPrint('StatisticsService: no se pudo leer SQLite: $e');
+    }
+
+    // 2. Transacciones del día actual desde SharedPreferences (aún no cerradas)
+    List<Map<String, dynamic>> prefsTransactions = [];
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? data = prefs.getString(_transactionsKey);
-      if (data == null || data.isEmpty) return [];
-      final List<dynamic> decoded = json.decode(data);
-      return decoded.cast<Map<String, dynamic>>();
+      if (data != null && data.isNotEmpty) {
+        final decoded = json.decode(data) as List<dynamic>;
+        prefsTransactions = decoded.cast<Map<String, dynamic>>();
+      }
     } catch (e) {
-      print('StatisticsService: error cargando transacciones: $e');
-      return [];
+      debugPrint('StatisticsService: no se pudo leer SharedPreferences: $e');
     }
+
+    return [...dbTransactions, ...prefsTransactions];
   }
 
   /// Obtiene estadísticas de ventas de los últimos [days] días

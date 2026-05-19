@@ -1,6 +1,7 @@
 import 'package:intl/date_symbol_data_local.dart';
 import 'cargo_screen.dart';
 import 'backup_screen.dart';
+import 'transferencia_screen.dart';
 import 'reporte_recovery.dart';
 import '../services/pdf/generateCargo_Ticket.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +33,7 @@ import '../services/home/home_helpers.dart';
 import '../widgets/home/password_dialogs.dart';
 import '../widgets/home/reprint_dialogs.dart';
 import '../widgets/home/home_app_bar_widgets.dart';
+import '../services/holiday_service.dart';
 import '../widgets/home/home_buttons.dart';
 import '../widgets/home/transaction_counter_widget.dart';
 import 'package:nfc_manager/nfc_manager.dart';
@@ -61,6 +63,9 @@ class _HomeState extends State<Home> {
   late Timer _timer;
   String _currentDay = '';
   bool _switchValue = false;
+  bool _isAutoTarifa =
+      false; // true cuando el switch fue fijado automáticamente
+  String? _holidayReason; // nombre del feriado o 'Domingo' si aplica
   bool _hasReprinted = false;
   bool _hasAnulado = false;
   bool _isPhoneMode = true;
@@ -125,6 +130,7 @@ class _HomeState extends State<Home> {
         _loadIconSettings(),
         _loadSumUpEnabled(),
         _loadButtonColors(),
+        _autoDetectTarifa(),
       ]);
 
       // Luego cargar recursos PDF y verificar transacciones
@@ -159,7 +165,6 @@ class _HomeState extends State<Home> {
             }
           },
         );
-
       } catch (e) {
         print('Error en precarga de recursos: $e');
       }
@@ -210,6 +215,18 @@ class _HomeState extends State<Home> {
       _showIcons = prefs['showIcons'];
       _textSizeMultiplier = prefs['textSizeMultiplier'];
       _iconSpacing = prefs['iconSpacing'];
+    });
+  }
+
+  /// Detecta automáticamente si hoy es domingo o feriado y ajusta el switch.
+  /// El usuario puede sobrescribir manualmente después de que cargue.
+  Future<void> _autoDetectTarifa() async {
+    final result = await HolidayService().checkToday();
+    if (!mounted) return;
+    setState(() {
+      _switchValue = result.isSpecial;
+      _isAutoTarifa = result.isSpecial;
+      _holidayReason = result.reason;
     });
   }
 
@@ -426,7 +443,7 @@ class _HomeState extends State<Home> {
   }
 
   // ==================== MÉTODOS DE COOLDOWN ====================
-  
+
   void _activateCooldown() {
     if (mounted) {
       setState(() {
@@ -568,6 +585,20 @@ class _HomeState extends State<Home> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => StatisticsScreen()),
+                    ).then((_) => _activateCooldown());
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.swap_horiz_rounded,
+                      color: Colors.purple.shade600),
+                  title: Text('Transferencia'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _activateCooldown();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const TransferenciaScreen()),
                     ).then((_) => _activateCooldown());
                   },
                 ),
@@ -970,7 +1001,8 @@ class _HomeState extends State<Home> {
                   label: 'Reintentar',
                   textColor: Colors.white,
                   onPressed: () async {
-                    await _generateTicketConTarjeta(tipo, valor, isCorrespondencia);
+                    await _generateTicketConTarjeta(
+                        tipo, valor, isCorrespondencia);
                   },
                 ),
                 duration: Duration(seconds: 5),
@@ -1005,7 +1037,7 @@ class _HomeState extends State<Home> {
   }
 
   // ==================== MÉTODOS DE NFC ====================
-  
+
   Future<void> _checkNfcAvailability() async {
     bool available = await NfcManager.instance.isAvailable();
     if (mounted) {
@@ -1020,7 +1052,7 @@ class _HomeState extends State<Home> {
   void _handleReprint() async {
     // Activar cooldown al abrir diálogo
     _activateCooldown();
-    
+
     // Si no es cargo y ya reimpreso, bloqueo
     if (_hasReprinted &&
         _lastTransaction != null &&
@@ -1046,14 +1078,14 @@ class _HomeState extends State<Home> {
 
     // Pedir contraseña (ahora con NFC)
     bool ok = await showReprintPasswordDialog(
-      context, 
+      context,
       HomeHelpers.loadPassword,
       _isNfcAvailable,
     );
-    
+
     // Reactivar cooldown al cerrar diálogo
     _activateCooldown();
-    
+
     if (!ok) return;
 
     // Cargo → muestro siempre opciones Cliente/Carga/Ambas
@@ -1362,7 +1394,8 @@ class _HomeState extends State<Home> {
                   context,
                   (String nombre, double valor, List<double> subtots,
                       String comprobante) async {
-                    await reporteCaja.addOfferEntries(subtots, valor, comprobante);
+                    await reporteCaja.addOfferEntries(
+                        subtots, valor, comprobante);
                     if (!mounted) return;
                     setState(() {
                       _lastTransaction = {
@@ -1732,9 +1765,10 @@ class _HomeState extends State<Home> {
                   builder: (context, comprobanteModel, child) {
                     // Formatear el número con ceros a la izquierda (6 dígitos)
                     // Mostrar el próximo número a imprimir (+1)
-                    final formattedNumber = (comprobanteModel.comprobanteNumber + 1)
-                        .toString()
-                        .padLeft(6, '0');
+                    final formattedNumber =
+                        (comprobanteModel.comprobanteNumber + 1)
+                            .toString()
+                            .padLeft(6, '0');
                     return Container(
                       height: 40,
                       padding: EdgeInsets.symmetric(horizontal: 12),
@@ -1900,7 +1934,8 @@ class _HomeState extends State<Home> {
                   padding: EdgeInsets.symmetric(vertical: 6, horizontal: 16),
                   child: Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
+                      Icon(Icons.warning_amber_rounded,
+                          color: Colors.red, size: 18),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1914,11 +1949,14 @@ class _HomeState extends State<Home> {
                       TextButton(
                         onPressed: _navigateToReports,
                         style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           minimumSize: Size(0, 0),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: Text('Cerrar', style: TextStyle(fontSize: 11, color: Colors.red.shade900)),
+                        child: Text('Cerrar',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.red.shade900)),
                       ),
                     ],
                   ),
@@ -1934,54 +1972,82 @@ class _HomeState extends State<Home> {
                   children: [
                     TransactionCounterWidget(),
                     // Switch compacto modo tarifa
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Stack(
-                            children: [
-                              Text(
-                                _switchValue ? 'D/F' : 'L-S',
-                                style: TextStyle(
-                                  fontFamily: 'Hemiheads',
-                                  fontSize: textSize * 0.85,
-                                  foreground: Paint()
-                                    ..style = PaintingStyle.stroke
-                                    ..strokeWidth = 2
-                                    ..color = Colors.black,
+                    Tooltip(
+                      message: _isAutoTarifa && _holidayReason != null
+                          ? 'Auto detectado: $_holidayReason'
+                          : _switchValue
+                              ? 'Tarifa Domingo / Feriado'
+                              : 'Tarifa Lunes a Sábado',
+                      preferBelow: false,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(8),
+                          border: _isAutoTarifa
+                              ? Border.all(
+                                  color: Colors.amber.withOpacity(0.8),
+                                  width: 1.2,
+                                )
+                              : null,
+                        ),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Ícono auto (rayo) visible solo cuando fue detectado automáticamente
+                            if (_isAutoTarifa)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 3),
+                                child: Icon(
+                                  Icons.bolt,
+                                  size: 12,
+                                  color: Colors.amber,
                                 ),
                               ),
-                              Text(
-                                _switchValue ? 'D/F' : 'L-S',
-                                style: TextStyle(
-                                  fontFamily: 'Hemiheads',
-                                  fontSize: textSize * 0.85,
-                                  color: _switchValue
-                                      ? Colors.red
-                                      : Colors.white,
+                            Stack(
+                              children: [
+                                Text(
+                                  _switchValue ? 'D/F' : 'L-S',
+                                  style: TextStyle(
+                                    fontFamily: 'Hemiheads',
+                                    fontSize: textSize * 0.85,
+                                    foreground: Paint()
+                                      ..style = PaintingStyle.stroke
+                                      ..strokeWidth = 2
+                                      ..color = Colors.black,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          Switch(
-                            value: _switchValue,
-                            onChanged: (value) {
-                              setState(() {
-                                _switchValue = value;
-                              });
-                            },
-                            activeColor: Colors.red,
-                            activeTrackColor: Colors.red.withOpacity(0.5),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ],
+                                Text(
+                                  _switchValue ? 'D/F' : 'L-S',
+                                  style: TextStyle(
+                                    fontFamily: 'Hemiheads',
+                                    fontSize: textSize * 0.85,
+                                    color: _switchValue
+                                        ? Colors.red
+                                        : Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: _switchValue,
+                              onChanged: (value) {
+                                setState(() {
+                                  _switchValue = value;
+                                  // Al cambiar manualmente, desactivar modo auto
+                                  _isAutoTarifa = false;
+                                  _holidayReason = null;
+                                });
+                              },
+                              activeColor: Colors.red,
+                              activeTrackColor: Colors.red.withOpacity(0.5),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -2003,208 +2069,257 @@ class _HomeState extends State<Home> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-
-                      // ─── PASAJEROS (izq) | INTERMEDIO (der) ──────────
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // ── Columna PASAJEROS ──────────────────────
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildSectionHeader('PASAJEROS'),
-                                SizedBox(height: 3),
-                                SizedBox(
-                                  height: buttonHeight,
-                                  child: HomeButtons.buildConfigurableButton(
-                                    context: context,
-                                    text: pasajes[0]['nombre'],
-                                    icon: Icons.people,
-                                    backgroundColor: _getButtonBackgroundColor(0, _switchValue),
-                                    borderColor: _getButtonBorderColor(0, _switchValue),
-                                    onPressed: () async {
-                                      await _showPaymentMethodDialog(pasajes[0]['nombre'], pasajes[0]['precio'], false);
-                                    },
-                                    showIcons: _showIcons,
-                                    textSizeMultiplier: _textSizeMultiplier,
-                                    buttonIcons: _buttonIcons,
-                                    isDisabled: _isButtonDisabled || hasPendingDays,
-                                  ),
-                                ),
-                                SizedBox(height: 5),
-                                SizedBox(
-                                  height: buttonHeight,
-                                  child: HomeButtons.buildConfigurableButton(
-                                    context: context,
-                                    text: pasajes[1]['nombre'],
-                                    icon: Icons.school,
-                                    backgroundColor: _getButtonBackgroundColor(1, _switchValue),
-                                    borderColor: _getButtonBorderColor(1, _switchValue),
-                                    onPressed: () async {
-                                      await _showPaymentMethodDialog(pasajes[1]['nombre'], pasajes[1]['precio'], false);
-                                    },
-                                    showIcons: _showIcons,
-                                    textSizeMultiplier: _textSizeMultiplier,
-                                    buttonIcons: _buttonIcons,
-                                    isDisabled: _isButtonDisabled || hasPendingDays,
-                                  ),
-                                ),
-                                SizedBox(height: 5),
-                                SizedBox(
-                                  height: buttonHeight,
-                                  child: HomeButtons.buildConfigurableButton(
-                                    context: context,
-                                    text: pasajes[2]['nombre'],
-                                    icon: Icons.elderly,
-                                    backgroundColor: _getButtonBackgroundColor(2, _switchValue),
-                                    borderColor: _getButtonBorderColor(2, _switchValue),
-                                    onPressed: () async {
-                                      await _showPaymentMethodDialog(pasajes[2]['nombre'], pasajes[2]['precio'], false);
-                                    },
-                                    showIcons: _showIcons,
-                                    textSizeMultiplier: _textSizeMultiplier,
-                                    buttonIcons: _buttonIcons,
-                                    isDisabled: _isButtonDisabled || hasPendingDays,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          // ── Columna INTERMEDIO ─────────────────────
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildSectionHeader('INTERMEDIO'),
-                                SizedBox(height: 3),
-                                SizedBox(
-                                  height: buttonHeight,
-                                  child: HomeButtons.buildConfigurableButton(
-                                    context: context,
-                                    text: pasajes[4]['nombre'],
-                                    icon: Icons.map,
-                                    backgroundColor: _getButtonBackgroundColor(4, _switchValue),
-                                    borderColor: _getButtonBorderColor(4, _switchValue),
-                                    onPressed: () async {
-                                      await _showPaymentMethodDialog(pasajes[4]['nombre'], pasajes[4]['precio'], false);
-                                    },
-                                    showIcons: _showIcons,
-                                    textSizeMultiplier: _textSizeMultiplier,
-                                    buttonIcons: _buttonIcons,
-                                    isDisabled: _isButtonDisabled || hasPendingDays,
-                                  ),
-                                ),
-                                SizedBox(height: 5),
-                                SizedBox(
-                                  height: buttonHeight,
-                                  child: HomeButtons.buildConfigurableButton(
-                                    context: context,
-                                    text: pasajes[3]['nombre'],
-                                    icon: Icons.directions_bus,
-                                    backgroundColor: _getButtonBackgroundColor(3, _switchValue),
-                                    borderColor: _getButtonBorderColor(3, _switchValue),
-                                    onPressed: () async {
-                                      await _showPaymentMethodDialog(pasajes[3]['nombre'], pasajes[3]['precio'], false);
-                                    },
-                                    showIcons: _showIcons,
-                                    textSizeMultiplier: _textSizeMultiplier,
-                                    buttonIcons: _buttonIcons,
-                                    isDisabled: _isButtonDisabled || hasPendingDays,
-                                  ),
-                                ),
-                                SizedBox(height: 5),
-                                SizedBox(
-                                  height: buttonHeight,
-                                  child: HomeButtons.buildConfigurableButton(
-                                    context: context,
-                                    text: pasajes.length > 5
-                                        ? pasajes[5]['nombre']
-                                        : 'Escolar Intermedio',
-                                    icon: Icons.school_outlined,
-                                    backgroundColor: _getButtonBackgroundColor(5, _switchValue),
-                                    borderColor: _getButtonBorderColor(5, _switchValue),
-                                    textColor: Colors.black,
-                                    onPressed: () async {
-                                      if (pasajes.length > 5) {
-                                        await _showPaymentMethodDialog(pasajes[5]['nombre'], pasajes[5]['precio'], false);
-                                      } else {
-                                        double defaultPrice = _switchValue ? 1300.0 : 1000.0;
-                                        await _showPaymentMethodDialog('Escolar Intermedio', defaultPrice, false);
-                                        print('ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
-                                      }
-                                    },
-                                    showIcons: _showIcons,
-                                    textSizeMultiplier: _textSizeMultiplier,
-                                    buttonIcons: _buttonIcons,
-                                    isDisabled: _isButtonDisabled || hasPendingDays,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 6),
-
-                      // ─── Sección OTROS ───────────────────────────────
-                      _buildSectionHeader('OTROS'),
-                      SizedBox(height: 3),
-                      SizedBox(
-                        height: buttonHeight,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        // ─── PASAJEROS (izq) | INTERMEDIO (der) ──────────
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // ── Columna PASAJEROS ──────────────────────
                             Expanded(
-                              child: HomeButtons.buildConfigurableButton(
-                                context: context,
-                                text: 'O F E R T A',
-                                icon: Icons.local_offer,
-                                backgroundColor: hasPendingDays
-                                    ? Colors.grey.shade300
-                                    : _getOtrosButtonBackgroundColor(0),
-                                borderColor: hasPendingDays
-                                    ? Colors.grey
-                                    : _getOtrosButtonBorderColor(0),
-                                textColor: Colors.black,
-                                onPressed: _showMultiOfferDialog,
-                                showIcons: _showIcons,
-                                textSizeMultiplier: _textSizeMultiplier,
-                                buttonIcons: _buttonIcons,
-                                isDisabled: _isButtonDisabled || hasPendingDays,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _buildSectionHeader('PASAJEROS'),
+                                  SizedBox(height: 3),
+                                  SizedBox(
+                                    height: buttonHeight,
+                                    child: HomeButtons.buildConfigurableButton(
+                                      context: context,
+                                      text: pasajes[0]['nombre'],
+                                      icon: Icons.people,
+                                      backgroundColor:
+                                          _getButtonBackgroundColor(
+                                              0, _switchValue),
+                                      borderColor: _getButtonBorderColor(
+                                          0, _switchValue),
+                                      onPressed: () async {
+                                        await _showPaymentMethodDialog(
+                                            pasajes[0]['nombre'],
+                                            pasajes[0]['precio'],
+                                            false);
+                                      },
+                                      showIcons: _showIcons,
+                                      textSizeMultiplier: _textSizeMultiplier,
+                                      buttonIcons: _buttonIcons,
+                                      isDisabled:
+                                          _isButtonDisabled || hasPendingDays,
+                                    ),
+                                  ),
+                                  SizedBox(height: 5),
+                                  SizedBox(
+                                    height: buttonHeight,
+                                    child: HomeButtons.buildConfigurableButton(
+                                      context: context,
+                                      text: pasajes[1]['nombre'],
+                                      icon: Icons.school,
+                                      backgroundColor:
+                                          _getButtonBackgroundColor(
+                                              1, _switchValue),
+                                      borderColor: _getButtonBorderColor(
+                                          1, _switchValue),
+                                      onPressed: () async {
+                                        await _showPaymentMethodDialog(
+                                            pasajes[1]['nombre'],
+                                            pasajes[1]['precio'],
+                                            false);
+                                      },
+                                      showIcons: _showIcons,
+                                      textSizeMultiplier: _textSizeMultiplier,
+                                      buttonIcons: _buttonIcons,
+                                      isDisabled:
+                                          _isButtonDisabled || hasPendingDays,
+                                    ),
+                                  ),
+                                  SizedBox(height: 5),
+                                  SizedBox(
+                                    height: buttonHeight,
+                                    child: HomeButtons.buildConfigurableButton(
+                                      context: context,
+                                      text: pasajes[2]['nombre'],
+                                      icon: Icons.elderly,
+                                      backgroundColor:
+                                          _getButtonBackgroundColor(
+                                              2, _switchValue),
+                                      borderColor: _getButtonBorderColor(
+                                          2, _switchValue),
+                                      onPressed: () async {
+                                        await _showPaymentMethodDialog(
+                                            pasajes[2]['nombre'],
+                                            pasajes[2]['precio'],
+                                            false);
+                                      },
+                                      showIcons: _showIcons,
+                                      textSizeMultiplier: _textSizeMultiplier,
+                                      buttonIcons: _buttonIcons,
+                                      isDisabled:
+                                          _isButtonDisabled || hasPendingDays,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            SizedBox(width: 10),
+                            SizedBox(width: 8),
+                            // ── Columna INTERMEDIO ─────────────────────
                             Expanded(
-                              child: HomeButtons.buildConfigurableButton(
-                                context: context,
-                                text: 'C A R G O',
-                                icon: Icons.inventory,
-                                textColor: Colors.black,
-                                backgroundColor:
-                                    _isButtonDisabled || hasPendingDays
-                                        ? Colors.grey
-                                        : _getOtrosButtonBackgroundColor(1),
-                                borderColor: _isButtonDisabled || hasPendingDays
-                                    ? Colors.grey.shade600
-                                    : _getOtrosButtonBorderColor(1),
-                                onPressed: _showOfferDialog,
-                                showIcons: _showIcons,
-                                textSizeMultiplier: _textSizeMultiplier,
-                                buttonIcons: _buttonIcons,
-                                isDisabled: _isButtonDisabled || hasPendingDays,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _buildSectionHeader('INTERMEDIO'),
+                                  SizedBox(height: 3),
+                                  SizedBox(
+                                    height: buttonHeight,
+                                    child: HomeButtons.buildConfigurableButton(
+                                      context: context,
+                                      text: pasajes[4]['nombre'],
+                                      icon: Icons.map,
+                                      backgroundColor:
+                                          _getButtonBackgroundColor(
+                                              4, _switchValue),
+                                      borderColor: _getButtonBorderColor(
+                                          4, _switchValue),
+                                      onPressed: () async {
+                                        await _showPaymentMethodDialog(
+                                            pasajes[4]['nombre'],
+                                            pasajes[4]['precio'],
+                                            false);
+                                      },
+                                      showIcons: _showIcons,
+                                      textSizeMultiplier: _textSizeMultiplier,
+                                      buttonIcons: _buttonIcons,
+                                      isDisabled:
+                                          _isButtonDisabled || hasPendingDays,
+                                    ),
+                                  ),
+                                  SizedBox(height: 5),
+                                  SizedBox(
+                                    height: buttonHeight,
+                                    child: HomeButtons.buildConfigurableButton(
+                                      context: context,
+                                      text: pasajes[3]['nombre'],
+                                      icon: Icons.directions_bus,
+                                      backgroundColor:
+                                          _getButtonBackgroundColor(
+                                              3, _switchValue),
+                                      borderColor: _getButtonBorderColor(
+                                          3, _switchValue),
+                                      onPressed: () async {
+                                        await _showPaymentMethodDialog(
+                                            pasajes[3]['nombre'],
+                                            pasajes[3]['precio'],
+                                            false);
+                                      },
+                                      showIcons: _showIcons,
+                                      textSizeMultiplier: _textSizeMultiplier,
+                                      buttonIcons: _buttonIcons,
+                                      isDisabled:
+                                          _isButtonDisabled || hasPendingDays,
+                                    ),
+                                  ),
+                                  SizedBox(height: 5),
+                                  SizedBox(
+                                    height: buttonHeight,
+                                    child: HomeButtons.buildConfigurableButton(
+                                      context: context,
+                                      text: pasajes.length > 5
+                                          ? pasajes[5]['nombre']
+                                          : 'Escolar Intermedio',
+                                      icon: Icons.school_outlined,
+                                      backgroundColor:
+                                          _getButtonBackgroundColor(
+                                              5, _switchValue),
+                                      borderColor: _getButtonBorderColor(
+                                          5, _switchValue),
+                                      textColor: Colors.black,
+                                      onPressed: () async {
+                                        if (pasajes.length > 5) {
+                                          await _showPaymentMethodDialog(
+                                              pasajes[5]['nombre'],
+                                              pasajes[5]['precio'],
+                                              false);
+                                        } else {
+                                          double defaultPrice =
+                                              _switchValue ? 1300.0 : 1000.0;
+                                          await _showPaymentMethodDialog(
+                                              'Escolar Intermedio',
+                                              defaultPrice,
+                                              false);
+                                          print(
+                                              'ADVERTENCIA: No se encontró Escolar Intermedio en la posición 5. Usando precio por defecto: $defaultPrice');
+                                        }
+                                      },
+                                      showIcons: _showIcons,
+                                      textSizeMultiplier: _textSizeMultiplier,
+                                      buttonIcons: _buttonIcons,
+                                      isDisabled:
+                                          _isButtonDisabled || hasPendingDays,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      SizedBox(height: 8),
-                    ],
+                        SizedBox(height: 6),
+
+                        // ─── Sección OTROS ───────────────────────────────
+                        _buildSectionHeader('OTROS'),
+                        SizedBox(height: 3),
+                        SizedBox(
+                          height: buttonHeight,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: HomeButtons.buildConfigurableButton(
+                                  context: context,
+                                  text: 'O F E R T A',
+                                  icon: Icons.local_offer,
+                                  backgroundColor: hasPendingDays
+                                      ? Colors.grey.shade300
+                                      : _getOtrosButtonBackgroundColor(0),
+                                  borderColor: hasPendingDays
+                                      ? Colors.grey
+                                      : _getOtrosButtonBorderColor(0),
+                                  textColor: Colors.black,
+                                  onPressed: _showMultiOfferDialog,
+                                  showIcons: _showIcons,
+                                  textSizeMultiplier: _textSizeMultiplier,
+                                  buttonIcons: _buttonIcons,
+                                  isDisabled:
+                                      _isButtonDisabled || hasPendingDays,
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: HomeButtons.buildConfigurableButton(
+                                  context: context,
+                                  text: 'C A R G O',
+                                  icon: Icons.inventory,
+                                  textColor: Colors.black,
+                                  backgroundColor:
+                                      _isButtonDisabled || hasPendingDays
+                                          ? Colors.grey
+                                          : _getOtrosButtonBackgroundColor(1),
+                                  borderColor:
+                                      _isButtonDisabled || hasPendingDays
+                                          ? Colors.grey.shade600
+                                          : _getOtrosButtonBorderColor(1),
+                                  onPressed: _showOfferDialog,
+                                  showIcons: _showIcons,
+                                  textSizeMultiplier: _textSizeMultiplier,
+                                  buttonIcons: _buttonIcons,
+                                  isDisabled:
+                                      _isButtonDisabled || hasPendingDays,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
             ],
           ),
 

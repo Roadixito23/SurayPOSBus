@@ -175,6 +175,26 @@ class DatabaseService {
     return result.first['count'] as int;
   }
 
+  /// Obtiene todas las transacciones históricas en formato compatible con ReporteCaja
+  Future<List<Map<String, dynamic>>> getAllTransactionsAsMap() async {
+    final db = await _dbHelper.database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT
+        t.transaction_id AS id,
+        t.nombre,
+        t.valor,
+        t.comprobante,
+        t.dia,
+        t.mes,
+        t.ano,
+        t.hora,
+        t.timestamp
+      FROM transactions t
+      ORDER BY t.timestamp ASC
+    ''');
+    return maps.map((m) => Map<String, dynamic>.from(m)).toList();
+  }
+
   /// Calcula totales por categoría para un cierre diario
   Future<Map<String, double>> getTotalsByCategory(int dailyClosingId) async {
     final db = await _dbHelper.database;

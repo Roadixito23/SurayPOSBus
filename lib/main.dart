@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:app_links/app_links.dart';
+import 'database/database_helper.dart';
 import 'services/pdf/pdf_resource_manager.dart';
 import 'services/pdf/pdf_optimizer.dart';
 import 'models/ComprobanteModel.dart';
@@ -22,6 +23,9 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Precalentar la BD para que esté lista antes de que cualquier pantalla la necesite
+  unawaited(DatabaseHelper.instance.database);
 
   // Start resource preloading in background
   unawaited(_preloadPdfResources());

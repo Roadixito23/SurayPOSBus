@@ -40,16 +40,34 @@ class PdfReportGenerator {
       }
     }
 
+    // Helpers de categorización por nombre
+    bool isIntermedio(String nombre) =>
+        nombre.toLowerCase().contains('int. hasta') ||
+        (nombre.toLowerCase().contains('escolar') &&
+            nombre.toLowerCase().contains('intermedio'));
+
+    bool isOtros(String nombre) =>
+        nombre.startsWith('Cargo:') || nombre == 'Oferta Ruta';
+
     // Filtrar transacciones según tipo
-    var pasajeTransactions = transactions.where((t) =>
-    !t['nombre'].toString().startsWith('Anulación:') &&
-        !t['nombre'].toString().startsWith('Cargo:')).toList();
+    var annulledTransactions = transactions
+        .where((t) => t['nombre'].toString().startsWith('Anulación:'))
+        .toList();
 
-    var correspondenceTransactions = transactions.where((t) =>
-        t['nombre'].toString().startsWith('Cargo:')).toList();
+    var otrosTransactions = transactions.where((t) {
+      final n = t['nombre'].toString();
+      return !n.startsWith('Anulación:') && isOtros(n);
+    }).toList();
 
-    var annulledTransactions = transactions.where((t) =>
-        t['nombre'].toString().startsWith('Anulación:')).toList();
+    var intermedioTransactions = transactions.where((t) {
+      final n = t['nombre'].toString();
+      return !n.startsWith('Anulación:') && !isOtros(n) && isIntermedio(n);
+    }).toList();
+
+    var pasajeTransactions = transactions.where((t) {
+      final n = t['nombre'].toString();
+      return !n.startsWith('Anulación:') && !isOtros(n) && !isIntermedio(n);
+    }).toList();
 
     // Obtener el ID antes de agregar la página
     String ticketId = await _getTicketId();
@@ -67,9 +85,7 @@ class PdfReportGenerator {
           // Función para crear tablas
           pw.Widget buildTable(String title, List<Map<String, dynamic>> transactionList) {
             if (transactionList.isEmpty) {
-              // Para Anulaciones, no mostrar mensaje "No hay transacciones"
-              // El mensaje se mostrará fuera de la tabla
-              if (title == 'Anulaciones') {
+              if (title == 'Anulaciones' || title == 'Intermedio' || title == 'Otros') {
                 return pw.SizedBox(height: 0);
               }
 
@@ -163,22 +179,16 @@ class PdfReportGenerator {
             );
           }
 
-          // Calcular el total de ingresos de hoy
-          DateTime today = DateTime.now();
-          String todayDay = today.day.toString();
-          String todayMonth = today.month.toString();
-
+          // Calcular totales por categoría
           double totalPasajes = pasajeTransactions.fold(0.0, (sum, t) => sum + (t['valor'] ?? 0.0));
-          double totalCorrespondencia = correspondenceTransactions.fold(0.0, (sum, t) => sum + (t['valor'] ?? 0.0));
+          double totalIntermedio = intermedioTransactions.fold(0.0, (sum, t) => sum + (t['valor'] ?? 0.0));
+          double totalOtros = otrosTransactions.fold(0.0, (sum, t) => sum + (t['valor'] ?? 0.0));
           double totalAnulaciones = annulledTransactions.fold(0.0, (sum, t) => sum + (t['valor'] ?? 0.0));
 
-          // Calcular el total de ingresos acumulado
-          double totalAcumulado = totalPasajes + totalCorrespondencia + totalAnulaciones;
-
-          // El totalAcumulado debe ser igual al 'total' pasado como parámetro (para verificación)
-          if (totalAcumulado.toStringAsFixed(2) != total.toStringAsFixed(2)) {
-            print("Advertencia: Diferencia entre total calculado ($totalAcumulado) y total pasado ($total)");
-          }
+          // Verificar coherencia del total
+          double totalAcumulado = totalPasajes + totalIntermedio + totalOtros + totalAnulaciones;
+          assert(totalAcumulado.toStringAsFixed(2) == total.toStringAsFixed(2),
+              'Diferencia entre total calculado ($totalAcumulado) y total pasado ($total)');
 
           return pw.Column(
             children: [
@@ -248,12 +258,12 @@ class PdfReportGenerator {
               ),
               pw.SizedBox(height: 5),
 
-              // Construir las tablas
-              buildTable('Pasajes', pasajeTransactions),
-              buildTable('Correspondencias', correspondenceTransactions),
-              buildTable('Anulaciones', annulledTransactions), // Nueva tabla para anulaciones
+              // Construir las tablas por categoría
+              buildTable('Pasajeros', pasajeTransactions),
+              buildTable('Intermedio', intermedioTransactions),
+              buildTable('Otros', otrosTransactions),
+              buildTable('Anulaciones', annulledTransactions),
 
-              // Mensaje si no hay anulaciones
               if (annulledTransactions.isEmpty)
                 pw.Text('Sin anulaciones el día de Hoy', style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
 
@@ -277,7 +287,7 @@ class PdfReportGenerator {
     await _savePdfToLocal(pdfData, diaDeLaSemana, reportDate); // Llamar a la función para guardar el PDF
 
     // Guardar información del día
-    await _saveDailyReport(diaDeLaSemana, reportDate, ticketId, correspondenceTransactions, pasajeTransactions, annulledTransactions);
+    await _saveDailyReport(diaDeLaSemana, reportDate, ticketId, pasajeTransactions, intermedioTransactions, otrosTransactions, annulledTransactions);
 
     return pdfData; // Retornar el PDF generado
   }
@@ -337,12 +347,21 @@ class PdfReportGenerator {
   }
 
   // Función para guardar el informe del día
-  Future<void> _saveDailyReport(String diaDeLaSemana, DateTime reportDate, String ticketId, List<Map<String, dynamic>> correspondenceTransactions, List<Map<String, dynamic>> pasajeTransactions, List<Map<String, dynamic>> annulledTransactions) async {
-    double totalCorrespondencia = correspondenceTransactions.fold(0, (sum, t) => sum + (t['valor'] ?? 0));
+  Future<void> _saveDailyReport(
+    String diaDeLaSemana,
+    DateTime reportDate,
+    String ticketId,
+    List<Map<String, dynamic>> pasajeTransactions,
+    List<Map<String, dynamic>> intermedioTransactions,
+    List<Map<String, dynamic>> otrosTransactions,
+    List<Map<String, dynamic>> annulledTransactions,
+  ) async {
     double totalPasaje = pasajeTransactions.fold(0, (sum, t) => sum + (t['valor'] ?? 0));
+    double totalIntermedio = intermedioTransactions.fold(0, (sum, t) => sum + (t['valor'] ?? 0));
+    double totalOtros = otrosTransactions.fold(0, (sum, t) => sum + (t['valor'] ?? 0));
     double totalAnulacion = annulledTransactions.fold(0, (sum, t) => sum + (t['valor'] ?? 0));
 
-    double totalDelDia = totalCorrespondencia + totalPasaje + totalAnulacion;
+    double totalDelDia = totalPasaje + totalIntermedio + totalOtros + totalAnulacion;
 
     final directory = await getApplicationDocumentsDirectory();
     final filePath = '${directory.path}/informe_dia_${DateFormat('yyyyMMdd').format(reportDate)}.txt';
@@ -352,13 +371,14 @@ class PdfReportGenerator {
 Día de la semana: $diaDeLaSemana
 Fecha: ${DateFormat('dd/MM/yyyy').format(reportDate)}
 ID: $ticketId
-Total Correspondencia: \$${totalCorrespondencia.toStringAsFixed(2)}
-Total Pasaje: \$${totalPasaje.toStringAsFixed(2)}
+Total Pasajeros: \$${totalPasaje.toStringAsFixed(2)}
+Total Intermedio: \$${totalIntermedio.toStringAsFixed(2)}
+Total Otros: \$${totalOtros.toStringAsFixed(2)}
 Total Anulación: \$${totalAnulacion.toStringAsFixed(2)}
 Total del Día: \$${totalDelDia.toStringAsFixed(2)}
 ''';
 
-    await file.writeAsString(reportContent); // Guardar el contenido en un archivo
+    await file.writeAsString(reportContent);
   }
 
   // Función para obtener el ID del ticket desde SharedPreferences

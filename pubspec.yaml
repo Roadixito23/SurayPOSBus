@@ -60,6 +60,7 @@ flutter:
     - assets/reprint.png
     - assets/tijera.png
     - assets/logominiposbkwt.png
+    - assets/qr_codes/wspqr.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
