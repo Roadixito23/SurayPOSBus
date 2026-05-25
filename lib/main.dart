@@ -41,7 +41,7 @@ void main() async {
 
   // Manejar deep link que abrió/resumió la app (initial/cold start)
   try {
-    final initialUri = await appLinks.getInitialLink();
+    final initialUri = await appLinks.getInitialAppLink();
     if (initialUri != null &&
         initialUri.scheme == 'posbus' &&
         initialUri.host == 'sumup-result') {
@@ -109,7 +109,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Mi App',
+      title: 'V25.05.26',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,

@@ -37,7 +37,7 @@ import '../services/holiday_service.dart';
 import '../widgets/home/home_buttons.dart';
 import '../widgets/home/transaction_counter_widget.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/platform_tags.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -549,7 +549,7 @@ class _HomeState extends State<Home> {
                   ),
                   SizedBox(height: 2),
                   Text(
-                    'V01.04.26',
+                    'V25.05.26',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,

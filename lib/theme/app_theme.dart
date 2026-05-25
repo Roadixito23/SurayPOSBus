@@ -33,114 +33,114 @@ class AppTheme {
 
   // Estilos de texto
   static TextStyle get titleLarge => TextStyle(
-    fontFamily: fontHemiheads,
-    fontSize: 26,
-    fontWeight: FontWeight.bold,
-    color: primaryDark,
-  );
+        fontFamily: fontHemiheads,
+        fontSize: 26,
+        fontWeight: FontWeight.bold,
+        color: primaryDark,
+      );
 
   static TextStyle get titleMedium => TextStyle(
-    fontFamily: fontHemiheads,
-    fontSize: 22,
-    fontWeight: FontWeight.bold,
-    color: primaryDark,
-  );
-
-  static TextStyle get subtitleLarge => TextStyle(
-    fontFamily: fontDefault,
-    fontSize: 18,
-    fontWeight: FontWeight.bold,
-    color: primaryDark,
-  );
-
-  static TextStyle get bodyLarge => TextStyle(
-    fontFamily: fontDefault,
-    fontSize: 16,
-    color: Colors.black87,
-  );
-
-  static TextStyle get bodyMedium => TextStyle(
-    fontFamily: fontDefault,
-    fontSize: 14,
-    color: Colors.black87,
-  );
-
-  static TextStyle get emphasis => TextStyle(
-    fontFamily: fontDefault,
-    fontSize: 16,
-    fontWeight: FontWeight.bold,
-    color: secondaryDark,
-  );
-
-  // Decoraciones
-  static BoxDecoration get cardDecoration => BoxDecoration(
-    color: cardBackground,
-    borderRadius: BorderRadius.circular(16),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withOpacity(0.05),
-        blurRadius: 10,
-        offset: Offset(0, 4),
-      ),
-    ],
-  );
-
-  static BoxDecoration get gradientBackground => BoxDecoration(
-    gradient: LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        primaryLight.withOpacity(0.3),
-        Colors.white,
-      ],
-    ),
-  );
-
-  // Tema completo de la aplicación
-  static ThemeData get lightTheme => ThemeData(
-    primaryColor: primary,
-    colorScheme: ColorScheme.light(
-      primary: primary,
-      secondary: secondary,
-      surface: background,
-      error: error,
-    ),
-    scaffoldBackgroundColor: background,
-    appBarTheme: AppBarTheme(
-      backgroundColor: primary,
-      elevation: 0,
-      titleTextStyle: TextStyle(
         fontFamily: fontHemiheads,
         fontSize: 22,
         fontWeight: FontWeight.bold,
-        color: Colors.white,
-      ),
-      iconTheme: IconThemeData(color: Colors.white),
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: primary,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: primaryDark,
-      ),
-    ),
-    cardTheme: CardThemeData(
-      shape: RoundedRectangleBorder(
+        color: primaryDark,
+      );
+
+  static TextStyle get subtitleLarge => TextStyle(
+        fontFamily: fontDefault,
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: primaryDark,
+      );
+
+  static TextStyle get bodyLarge => TextStyle(
+        fontFamily: fontDefault,
+        fontSize: 16,
+        color: Colors.black87,
+      );
+
+  static TextStyle get bodyMedium => TextStyle(
+        fontFamily: fontDefault,
+        fontSize: 14,
+        color: Colors.black87,
+      );
+
+  static TextStyle get emphasis => TextStyle(
+        fontFamily: fontDefault,
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: secondaryDark,
+      );
+
+  // Decoraciones
+  static BoxDecoration get cardDecoration => BoxDecoration(
+        color: cardBackground,
         borderRadius: BorderRadius.circular(16),
-      ),
-      elevation: 2,
-    ),
-    fontFamily: fontDefault,
-  );
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      );
+
+  static BoxDecoration get gradientBackground => BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            primaryLight.withOpacity(0.3),
+            Colors.white,
+          ],
+        ),
+      );
+
+  // Tema completo de la aplicación
+  static ThemeData get lightTheme => ThemeData(
+        primaryColor: primary,
+        colorScheme: ColorScheme.light(
+          primary: primary,
+          secondary: secondary,
+          surface: background,
+          error: error,
+        ),
+        scaffoldBackgroundColor: background,
+        appBarTheme: AppBarTheme(
+          backgroundColor: primary,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            fontFamily: fontHemiheads,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          iconTheme: IconThemeData(color: Colors.white),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primary,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: primaryDark,
+          ),
+        ),
+        cardTheme: CardTheme(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 2,
+        ),
+        fontFamily: fontDefault,
+      );
 
   // Duración para animaciones
   static const Duration animationDuration = Duration(milliseconds: 300);

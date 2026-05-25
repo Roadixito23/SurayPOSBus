@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'backup_screen.dart';
 import '../models/ComprobanteModelSettings.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/platform_tags.dart';
 import 'button_color_settings_screen.dart';
 
 class Settings extends StatefulWidget {
@@ -22,7 +22,8 @@ class Settings extends StatefulWidget {
 class _SettingsState extends State<Settings>
     with SingleTickerProviderStateMixin {
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController settingsPasswordController = TextEditingController();
+  final TextEditingController settingsPasswordController =
+      TextEditingController();
   final TextEditingController idController = TextEditingController();
   bool isAuthenticated = false;
   double _textSizeMultiplier = 0.8;
@@ -39,7 +40,8 @@ class _SettingsState extends State<Settings>
   // Control para habilitar/deshabilitar pagos con tarjeta SumUp
   bool _sumUpEnabled = true;
   // Controller para el affiliate key de SumUp
-  final TextEditingController _sumUpAffiliateKeyController = TextEditingController();
+  final TextEditingController _sumUpAffiliateKeyController =
+      TextEditingController();
 
   Future<bool> _showComprobanteAuthDialog() async {
     final prefs = await SharedPreferences.getInstance();
@@ -442,7 +444,8 @@ class _SettingsState extends State<Settings>
       bool? savedIcons = prefs.getBool('showIcons');
       double? savedSize = prefs.getDouble('textSizeMultiplier');
       double? savedOpacity = prefs.getDouble('buttonOpacity');
-      print('Verified: showIcons=$savedIcons, textSizeMultiplier=$savedSize, buttonOpacity=$savedOpacity');
+      print(
+          'Verified: showIcons=$savedIcons, textSizeMultiplier=$savedSize, buttonOpacity=$savedOpacity');
 
       // Set flag that settings have changed
       _settingsChanged = true;
@@ -739,9 +742,10 @@ class _SettingsState extends State<Settings>
       NfcManager.instance.startSession(
         pollingOptions: {NfcPollingOption.iso14443},
         onDiscovered: (NfcTag tag) async {
-          final nfcTag = NfcTagAndroid.from(tag);
-          if (nfcTag != null) {
-            final tagId = nfcTag.id;
+          final tagId = NfcA.from(tag)?.identifier ??
+              NfcB.from(tag)?.identifier ??
+              IsoDep.from(tag)?.identifier;
+          if (tagId != null) {
             final tagIdHex = tagId
                 .map((b) => b.toRadixString(16).padLeft(2, '0'))
                 .join(':')
@@ -817,9 +821,10 @@ class _SettingsState extends State<Settings>
       NfcManager.instance.startSession(
         pollingOptions: {NfcPollingOption.iso14443},
         onDiscovered: (NfcTag tag) async {
-          final nfcTag = NfcTagAndroid.from(tag);
-          if (nfcTag != null) {
-            final tagId = nfcTag.id;
+          final tagId = NfcA.from(tag)?.identifier ??
+              NfcB.from(tag)?.identifier ??
+              IsoDep.from(tag)?.identifier;
+          if (tagId != null) {
             final tagIdHex = tagId
                 .map((b) => b.toRadixString(16).padLeft(2, '0'))
                 .join(':')
@@ -917,7 +922,7 @@ class _SettingsState extends State<Settings>
 
   Future<void> _loadSumUpAffiliateKey() async {
     final prefs = await SharedPreferences.getInstance();
-    final affiliateKey = prefs.getString('sumup_affiliate_key') ?? 
+    final affiliateKey = prefs.getString('sumup_affiliate_key') ??
         'sup_afk_BydGVQ41DbNaM3Mm441GRPxon06MIkXu'; // Valor por defecto
     _sumUpAffiliateKeyController.text = affiliateKey;
   }
@@ -925,7 +930,7 @@ class _SettingsState extends State<Settings>
   Future<void> _saveSumUpAffiliateKey() async {
     final prefs = await SharedPreferences.getInstance();
     final newKey = _sumUpAffiliateKeyController.text.trim();
-    
+
     if (newKey.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -942,7 +947,7 @@ class _SettingsState extends State<Settings>
       );
       return;
     }
-    
+
     await prefs.setString('sumup_affiliate_key', newKey);
     _settingsChanged = true;
 
@@ -1711,7 +1716,8 @@ class _SettingsState extends State<Settings>
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () => _saveSettingsPassword(settingsPasswordController.text),
+                      onPressed: () => _saveSettingsPassword(
+                          settingsPasswordController.text),
                       icon: Icon(Icons.save),
                       label: Text('Guardar contraseña de ajustes'),
                       style: ElevatedButton.styleFrom(
@@ -1863,7 +1869,8 @@ class _SettingsState extends State<Settings>
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                        Icon(Icons.info_outline,
+                            color: Colors.blue[700], size: 20),
                         SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -2063,8 +2070,7 @@ class _SettingsState extends State<Settings>
                       final result = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) =>
-                              ButtonColorSettingsScreen(
+                          builder: (context) => ButtonColorSettingsScreen(
                             buttonName: ticketModel.pasajes[index]['nombre'],
                             ticketType: 'weekday',
                             buttonIndex: index,
@@ -2105,10 +2111,9 @@ class _SettingsState extends State<Settings>
                       final result = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) =>
-                              ButtonColorSettingsScreen(
-                            buttonName:
-                                sundayTicketModel.pasajes[index]['nombre'],
+                          builder: (context) => ButtonColorSettingsScreen(
+                            buttonName: sundayTicketModel.pasajes[index]
+                                ['nombre'],
                             ticketType: 'sunday',
                             buttonIndex: index,
                           ),
@@ -2409,28 +2414,28 @@ class _SettingsState extends State<Settings>
                           disabledBackgroundColor: Colors.blue,
                           disabledForegroundColor: Colors.white,
                           side: BorderSide(color: Colors.black, width: 3),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (_showIcons) ...[
-                            Icon(Icons.directions_bus,
-                                size: 24 * _textSizeMultiplier),
-                            SizedBox(width: _iconSpacing),
-                            // Use the configurable spacing
-                          ],
-                          Text(
-                            'Botón de Ejemplo',
-                            style: TextStyle(
-                              fontSize: 18 * _textSizeMultiplier,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ],
-                      ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_showIcons) ...[
+                              Icon(Icons.directions_bus,
+                                  size: 24 * _textSizeMultiplier),
+                              SizedBox(width: _iconSpacing),
+                              // Use the configurable spacing
+                            ],
+                            Text(
+                              'Botón de Ejemplo',
+                              style: TextStyle(
+                                fontSize: 18 * _textSizeMultiplier,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -2620,7 +2625,10 @@ class _SettingsState extends State<Settings>
             padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [primaryLight.withOpacity(0.15), accentColor.withOpacity(0.1)],
+                colors: [
+                  primaryLight.withOpacity(0.15),
+                  accentColor.withOpacity(0.1)
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),

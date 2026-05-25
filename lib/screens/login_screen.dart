@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/platform_tags.dart';
 import 'dart:convert';
 import 'home.dart';
 
@@ -67,11 +67,15 @@ class _LoginScreenState extends State<LoginScreen> {
         pollingOptions: {NfcPollingOption.iso14443},
         onDiscovered: (NfcTag tag) async {
           // Leer el UID de la tarjeta (ID único que todas las tarjetas tienen)
-          final nfcTag = NfcTagAndroid.from(tag);
-          if (nfcTag != null) {
-            final tagId = nfcTag.id;
-            final tagIdHex = tagId.map((b) => b.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
-            
+          final tagId = NfcA.from(tag)?.identifier ??
+              NfcB.from(tag)?.identifier ??
+              IsoDep.from(tag)?.identifier;
+          if (tagId != null) {
+            final tagIdHex = tagId
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join(':')
+                .toUpperCase();
+
             setState(() {
               _nfcStatus = 'Tarjeta detectada\nID: $tagIdHex';
             });
@@ -79,11 +83,13 @@ class _LoginScreenState extends State<LoginScreen> {
             // Cargar IDs autorizados desde SharedPreferences
             final prefs = await SharedPreferences.getInstance();
             final cardsJson = prefs.getString('linked_nfc_cards') ?? '[]';
-            final List<String> authorizedIds = List<String>.from(json.decode(cardsJson));
+            final List<String> authorizedIds =
+                List<String>.from(json.decode(cardsJson));
 
             // Verificar si el UID está en la lista O si la lista está vacía (permite todas)
-            bool isAuthorized = authorizedIds.isEmpty || authorizedIds.contains(tagIdHex);
-            
+            bool isAuthorized =
+                authorizedIds.isEmpty || authorizedIds.contains(tagIdHex);
+
             if (isAuthorized) {
               await NfcManager.instance.stopSession();
               setState(() {
@@ -149,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       isAuthenticated = true;
     });
-    
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => const Home()),
     );
@@ -186,7 +192,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 _isReadingNfc ? Icons.nfc : Icons.nfc_outlined,
                 color: Colors.white,
               ),
-              tooltip: _isReadingNfc ? 'Detener lectura NFC' : 'Iniciar lectura NFC',
+              tooltip:
+                  _isReadingNfc ? 'Detener lectura NFC' : 'Iniciar lectura NFC',
             ),
         ],
       ),
@@ -363,8 +370,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          onPressed:
-                              _isReadingNfc ? _stopNfcReading : _startNfcReading,
+                          onPressed: _isReadingNfc
+                              ? _stopNfcReading
+                              : _startNfcReading,
                         ),
                       ),
                     ],
